@@ -1,0 +1,75 @@
+@use "../../../../styles/variables" as *;
+
+.library-page {
+  width: 100%;
+}
+
+.library-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.library-title {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: $primary-color;
+}
+
+.library-subtitle {
+  font-size: 0.95rem;
+  color: $text-secondary;
+}
+
+.library-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px 20px;
+}
+
+.library-card {
+  background: #fff;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  transition:
+    transform 0.15s ease-out,
+    box-shadow 0.15s ease-out;
+
+  &:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.12);
+  }
+}
+
+.library-card-cover {
+  width: 250px;
+  aspect-ratio: 3 / 4;
+  background-size: cover;
+  background-position: center;
+}
+
+.library-card-body {
+  padding: 10px 12px 14px;
+}
+
+.library-card-title {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: $text-main;
+  text-transform: uppercase;
+}
+
+@media (max-width: 900px) {
+  .library-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .library-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

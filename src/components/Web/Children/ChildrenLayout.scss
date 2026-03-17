@@ -1,0 +1,127 @@
+@use "../../../styles/variables" as *;
+
+.children-page {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  // background: $bg-visual;
+}
+
+.children-home-page {
+  max-width: 1200px;
+  width: 100%;
+  min-height: 100vh;
+  margin: 0 auto;
+  display: flex;
+}
+
+.children-side {
+  width: 260px;
+  background: $bg-visual;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+}
+
+.children-side-hero {
+  text-align: center;
+}
+
+.children-side-illustration {
+  width: 200px;
+  height: 200px;
+  margin: 0 auto 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.children-side-illustration-img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.children-side-text {
+  color: $primary-color;
+  font-weight: 800;
+  font-size: 1.4rem;
+}
+
+.children-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  // background: #ffffff;
+  margin: 0 30px;
+}
+
+.children-navbar {
+  border-radius: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 32px;
+  background: #d4eeeb;
+}
+
+.children-navbar-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  .children-avatar-img {
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    background: rgba($primary-color, 0.2);
+  }
+}
+
+.children-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: rgba($primary-color, 0.2);
+}
+
+.children-nav-tabs {
+  display: flex;
+  gap: 16px;
+}
+
+.children-nav-link {
+  position: relative;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  color: $text-secondary;
+  text-decoration: none;
+  transition:
+    background 0.2s,
+    color 0.2s;
+
+  &.is-active {
+    background: #ffffff;
+    color: $primary-color;
+    font-weight: 700;
+  }
+}
+
+.children-navbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: $primary-color;
+}
+
+.children-coin-icon {
+  font-size: 1.2rem;
+}
+
+.children-content {
+  flex: 1;
+  padding: 24px 0;
+  overflow-y: auto;
+}
