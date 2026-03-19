@@ -6,6 +6,7 @@ import VerifyEmailPage from "./components/Login/RegisterPage/VerifyEmailPage/Ver
 import SelectRolePage from "./components/Login/RegisterPage/SelectRolePage/SelectRolePage";
 import ChildrenLayout from "./components/Web/Children/ChildrenLayout";
 import LibararyPage from "./components/Web/Children/Library/LibararyPage";
+import CalibrationStartPage from "./components/Web/Children/CalibrationStart/CalibrationStartPage";
 // import HomePage from "./components/Web/Children/ChildrenLayout";
 
 function App() {
@@ -23,9 +24,15 @@ function App() {
       {/* children */}
       <Route path="/children" element={<ChildrenLayout />}>
         {/* <Route path="/children/profile" element={<ProfilePage />} /> */}
-        <Route path="/children/library" element={<LibararyPage />} />
+        <Route path="library" element={<LibararyPage />} />
         {/* <Route path="/children/store" element={<StorePage />} /> */}
       </Route>
+
+      {/* standalone calibration */}
+      <Route
+        path="/children/calibration/start"
+        element={<CalibrationStartPage />}
+      />
     </Routes>
   );
 }

@@ -1,0 +1,386 @@
+.calibration-start-page {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  min-height: 100vh;
+  background: #FDFBF7;
+  overflow: hidden;
+  padding: 24px;
+  box-sizing: border-box;
+  overscroll-behavior: none;
+
+  &.calibration-phase-start,
+  &.calibration-phase-success {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+.calibration-start-card {
+  width: 770px;
+  height: 520px;
+  border-radius: 30px;
+  background: #ffffff;
+  box-shadow:
+    
+    0 22px 88px rgba(255, 201, 61, 0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 36px;
+}
+
+.calibration-start-hero {
+  width: 210px;
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin-bottom: 16px;
+}
+
+.calibration-start-title {
+  margin: 0;
+  color: #fbbf24;
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.calibration-start-subtitle {
+  margin: 10px 0 32px;
+  color: #334155;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.calibration-start-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 183px;
+  height: 52px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 24px;
+  background: #ffc93d;
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: 600;
+  font-family: inherit;
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+  cursor: pointer;
+  box-shadow: none;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.2s ease, filter 0.2s ease;
+
+  &:hover {
+    filter: brightness(0.98);
+    transform: translateY(-1px);
+    border: none;
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+
+  &:focus,
+  &:focus-visible {
+    outline: none;
+    border: none;
+    box-shadow: none;
+  }
+}
+
+.calibration-finish-button {
+  width: 420px;
+  font-size: 24px;
+}
+
+.calibration-timer {
+  position: absolute;
+  top: 36px;
+  right: 42px;
+  color: #334155;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  z-index: 2;
+
+  &.is-blur {
+    filter: blur(2.6px);
+    opacity: 0.55;
+  }
+}
+
+.game-bee-wrapper {
+  position: absolute;
+  width: 138px;
+  height: 96px;
+  transform-origin: 78% 52%;
+  will-change: transform, opacity;
+  z-index: 3;
+  transition:
+    transform 0.22s ease,
+    opacity 0.32s ease,
+    filter 0.26s ease;
+
+  &:hover {
+    .game-bee {
+      transform: scale(1.06);
+      filter: saturate(1.04);
+    }
+  }
+
+  &.is-hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  &.is-visible {
+    opacity: 1;
+  }
+}
+
+.game-bee {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 138px;
+  height: auto;
+  display: block;
+  user-select: none;
+  pointer-events: none;
+  cursor: crosshair;
+  transition:
+    transform 0.2s ease,
+    filter 0.26s ease;
+}
+
+.hover-feedback {
+  position: absolute;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: #fbbf24;
+  font-size: 26px;
+  font-weight: 700;
+  opacity: 0;
+  transform: rotate(-7deg) scale(0.86);
+  transition:
+    opacity 0.2s ease,
+    transform 0.26s ease;
+  pointer-events: none;
+  z-index: 4;
+
+  &.is-visible {
+    opacity: 1;
+    transform: translateY(0) rotate(-7deg) scale(1);
+
+    .hover-feedback-content {
+      animation: hoverPopupIn 0.42s cubic-bezier(0.2, 0.82, 0.25, 1);
+    }
+
+    .hover-feedback-burst {
+      animation: hoverBurstIn 0.34s ease-out;
+    }
+  }
+}
+
+.hover-feedback-burst {
+  display: block;
+}
+
+.hover-feedback-content {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.hover-feedback-text {
+  line-height: 1;
+}
+
+.hover-feedback-score {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #2ec4b6;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.hover-feedback-score-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+@keyframes hoverPopupIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.65);
+  }
+
+  60% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes hoverBurstIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.45);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.background-blur-bee {
+  position: absolute;
+  width: 200px;
+  left: 17%;
+  bottom: 4%;
+  filter: blur(3.2px);
+  opacity: 0.48;
+  z-index: 1;
+}
+
+.success-card {
+  z-index: 5;
+}
+
+.reward-points {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: #2ec4b6;
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 24px;
+}
+
+.reward-icon {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+@media (max-width: 860px) {
+  .calibration-start-page {
+    padding: 18px;
+  }
+
+  .calibration-start-card {
+    width: 100%;
+    height: auto;
+    min-height: 520px;
+    padding: 28px 20px;
+  }
+
+  .calibration-start-title {
+    font-size: 32px;
+  }
+
+  .calibration-start-subtitle {
+    font-size: 15px;
+  }
+
+  .calibration-timer {
+    top: 20px;
+    right: 24px;
+    font-size: 26px;
+  }
+
+  .game-bee {
+    width: 118px;
+  }
+
+  .game-bee-wrapper {
+    width: 118px;
+    height: 88px;
+  }
+
+  .hover-feedback {
+    font-size: 22px;
+  }
+
+  .hover-feedback-score {
+    font-size: 20px;
+  }
+
+  .hover-feedback-score-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .reward-points {
+    font-size: 34px;
+  }
+}
+
+@media (max-width: 480px) {
+  .calibration-start-title {
+    font-size: 28px;
+  }
+
+  .calibration-start-button {
+    width: 250px;
+    height: 50px;
+    font-size: 21px;
+  }
+
+  .calibration-finish-button {
+    width: min(420px, 92vw);
+    font-size: 24px;
+  }
+
+  .game-bee {
+    width: 96px;
+  }
+
+  .game-bee-wrapper {
+    width: 96px;
+    height: 72px;
+  }
+
+  .calibration-timer {
+    right: 16px;
+    top: 16px;
+    font-size: 22px;
+  }
+
+  .reward-points {
+    font-size: 30px;
+  }
+
+  .hover-feedback-score {
+    font-size: 18px;
+  }
+
+  .hover-feedback-score-icon {
+    width: 16px;
+    height: 16px;
+  }
+}
