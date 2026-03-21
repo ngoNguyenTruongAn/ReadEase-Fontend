@@ -13,18 +13,24 @@
   min-height: 100vh;
   margin: 0 auto;
   display: flex;
+  align-items: flex-start;
 }
 
 .children-side {
   width: 260px;
   background: $bg-visual;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   padding: 32px 16px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  align-self: flex-start;
 }
 
 .children-side-hero {
+  width: 100%;
   text-align: center;
 }
 
@@ -35,12 +41,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 
 .children-side-illustration-img {
-  max-width: 100%;
-  height: auto;
+  width: 100%;
+  height: 100%;
   display: block;
+  object-fit: contain;
+  object-position: center;
 }
 
 .children-side-text {
@@ -49,21 +58,106 @@
   font-size: 1.4rem;
 }
 
+// ===== STORY SIDEBAR (khi chọn truyện) =====
+.children-side-story {
+  width: 100%;
+  max-width: 220px;
+  margin: 0 auto;
+  text-align: left;
+}
+
+.children-side-story-cover {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+  margin-bottom: 12px;
+}
+
+.children-side-story-cover-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: center;
+}
+
+.children-side-story-title {
+  margin: 0 0 10px;
+  color: $text-main;
+  font-size: 1.05rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  line-height: 1.15;
+}
+
+.children-side-story-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.children-side-story-tag {
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.65);
+  font-size: 0.72rem;
+  color: $text-secondary;
+  font-weight: 600;
+}
+
+.children-side-story-desc {
+  margin: 0 0 14px;
+  color: $text-main;
+  font-size: 0.86rem;
+  line-height: 1.35;
+  display: -webkit-box;
+  line-clamp: 4;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.children-side-story-cta {
+  width: 100%;
+  height: 42px;
+  border-radius: 12px;
+  border: none;
+  background: $primary-color;
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+  transition: 0.2s;
+
+  &:hover {
+    background: darken($primary-color, 6%);
+    transform: translateY(-1px);
+  }
+}
+
 .children-main {
   flex: 1;
   display: flex;
   flex-direction: column;
   // background: #ffffff;
   margin: 0 30px;
+  min-height: 100vh;
 }
 
 .children-navbar {
-  border-radius: 24px;
+  border-radius: 35px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 16px 32px;
   background: #d4eeeb;
+  position: sticky;
+  top: 16px;
+  z-index: 10;
 }
 
 .children-navbar-left {
@@ -94,7 +188,7 @@
   position: relative;
   padding: 6px 10px;
   border-radius: 999px;
-  font-size: 0.95rem;
+  font-size: 1.2rem;
   color: $text-secondary;
   text-decoration: none;
   transition:
@@ -124,4 +218,5 @@
   flex: 1;
   padding: 24px 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }

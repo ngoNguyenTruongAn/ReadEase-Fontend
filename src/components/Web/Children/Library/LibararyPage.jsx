@@ -1,4 +1,5 @@
 import React from "react";
+import { useOutletContext } from "react-router-dom";
 import "./LibararyPage.scss";
 
 // TODO: sau này thay bằng data thật từ API
@@ -39,11 +40,44 @@ const MOCK_STORIES = [
     coverUrl:
       "https://images.pexels.com/photos/5945845/pexels-photo-5945845.jpeg?auto=compress&w=600",
   },
+  {
+    id: 7,
+    title: "Sự tích dưa hấu",
+    coverUrl:
+      "https://images.pexels.com/photos/5945845/pexels-photo-5945845.jpeg?auto=compress&w=600",
+  },
+  {
+    id: 8,
+    title: "Sự tích dưa hấu",
+    coverUrl:
+      "https://images.pexels.com/photos/5945845/pexels-photo-5945845.jpeg?auto=compress&w=600",
+  },
+  {
+    id: 9,
+    title: "Sự tích dưa hấu",
+    coverUrl:
+      "https://images.pexels.com/photos/5945845/pexels-photo-5945845.jpeg?auto=compress&w=600",
+  },
+  {
+    id: 10,
+    title: "Sự tích dưa hấu",
+    coverUrl:
+      "https://images.pexels.com/photos/5945845/pexels-photo-5945845.jpeg?auto=compress&w=600",
+  },
 ];
 
 const LibararyPage = () => {
+  const { setSideStory } = useOutletContext() ?? {};
+
   const handleClickStory = (story) => {
-    // TODO: điều hướng sang trang chi tiết truyện / reader
+    setSideStory?.({
+      kind: "story",
+      src: story.coverUrl,
+      alt: story.title,
+      title: story.title,
+      description:
+        "“Ngày xưa, ở một làng nọ, có một anh nông phu nghèo...”",
+    });
     console.log("Open story:", story);
   };
 

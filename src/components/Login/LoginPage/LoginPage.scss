@@ -20,8 +20,33 @@
 }
 
 .login-form {
+  &__error {
+    margin: 0 0 12px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    color: #b42318;
+    background: #fef3f2;
+    border: 1px solid #fecdca;
+
+    &--global {
+      margin-bottom: 16px;
+    }
+  }
+
   .input-group {
     margin-bottom: 15px;
+
+    &--invalid input {
+      border-color: #f04438;
+    }
+
+    &__error {
+      margin: 6px 0 0;
+      font-size: 0.85rem;
+      color: #b42318;
+      line-height: 1.35;
+    }
 
     input {
       width: 100%;
@@ -35,6 +60,10 @@
       &:focus {
         border-color: $primary-color;
       }
+    }
+
+    &--invalid input:focus {
+      border-color: #f04438;
     }
   }
 
@@ -61,9 +90,14 @@
     cursor: pointer;
     transition: 0.25s;
 
-    &:hover {
+    &:hover:not(:disabled) {
       transform: translateY(-2px);
       background: darken($primary-color, 6%);
+    }
+
+    &:disabled {
+      opacity: 0.75;
+      cursor: not-allowed;
     }
   }
 }

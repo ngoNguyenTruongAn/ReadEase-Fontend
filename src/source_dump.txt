@@ -1,0 +1,1026 @@
+# ==================================================
+# Path: D:\Cap2\src
+# Detected tech: react
+# ==================================================
+
+## DIRECTORY STRUCTURE
+```
+src/
+├── app/
+│   └── instance.jsx
+├── assets/
+│   ├── Store/
+│   │   └── instance.jsx
+│   ├── image/
+│   │   ├── Friendly monster waving a flag 1.png
+│   │   ├── reading book and sitting on the grass 1.png
+│   │   └── sparkles 1.png
+│   └── react.svg
+├── components/
+│   ├── Common/
+│   │   └── Button.jsx
+│   ├── Login/
+│   │   ├── LoginPage/
+│   │   │   ├── LoginPage.jsx
+│   │   │   └── LoginPage.scss
+│   │   ├── RegisterPage/
+│   │   │   ├── SelectRolePage/
+│   │   │   │   ├── SelectRolePage.jsx
+│   │   │   │   └── SelectRolePage.scss
+│   │   │   ├── VerifyEmailPage/
+│   │   │   │   ├── VerifyEmailPage.jsx
+│   │   │   │   └── VerifyEmailPage.scss
+│   │   │   ├── RegisterPage.jsx
+│   │   │   └── RegisterPage.scss
+│   │   ├── LoginLayout.jsx
+│   │   └── LoginLayout.scss
+│   └── Web/
+│       ├── Children/
+│       │   ├── HomePage/
+│       │   ├── Library/
+│       │   │   ├── LibararyPage.jsx
+│       │   │   └── LibararyPage.scss
+│       │   ├── Store/
+│       │   ├── ChildrenLayout.jsx
+│       │   └── ChildrenLayout.scss
+│       └── Doctor/
+├── service/
+│   ├── Auth/
+│   │   └── AuthAPI.jsx
+│   ├── Contents/
+│   │   └── ContenAPI.jsx
+│   ├── Health/
+│   │   └── HealthAPI.jsx
+│   ├── Users/
+│   │   └── UsersAPI.jsx
+│   └── instance.jsx
+├── styles/
+│   └── _variables.scss
+├── App.jsx
+├── index.css
+└── main.jsx
+```
+
+## FILE CONTENTS
+
+### App.jsx
+```jsx
+import { Navigate, Route, Routes } from "react-router-dom";
+import LoginLayout from "./components/Login/LoginLayout";
+import LoginPage from "./components/Login/LoginPage/LoginPage";
+import RegisterPage from "./components/Login/RegisterPage/RegisterPage";
+import VerifyEmailPage from "./components/Login/RegisterPage/VerifyEmailPage/VerifyEmailPage";
+import SelectRolePage from "./components/Login/RegisterPage/SelectRolePage/SelectRolePage";
+import ChildrenLayout from "./components/Web/Children/ChildrenLayout";
+import LibararyPage from "./components/Web/Children/Library/LibararyPage";
+// import HomePage from "./components/Web/Children/ChildrenLayout";
+
+function App() {
+  return (
+    <Routes>
+      {/* login */}
+      <Route element={<LoginLayout />}>
+        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/validate" element={<VerifyEmailPage />} />
+        <Route path="/select-role" element={<SelectRolePage />} />
+      </Route>
+
+      {/* children */}
+      <Route path="/children" element={<ChildrenLayout />}>
+        {/* <Route path="/children/profile" element={<ProfilePage />} /> */}
+        <Route path="/children/library" element={<LibararyPage />} />
+        {/* <Route path="/children/store" element={<StorePage />} /> */}
+      </Route>
+    </Routes>
+  );
+}
+
+export default App;
+
+```
+
+### main.jsx
+```jsx
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
+import App from "./App.jsx";
+
+createRoot(document.getElementById("root")).render(
+  <StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </StrictMode>,
+);
+
+```
+
+### app\instance.jsx
+```jsx
+// api/axiosInstance.js
+import axios from "axios";
+
+const instance = axios.create({
+  baseURL: "http://localhost:3000/api/v1/",
+});
+
+instance.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+export default instance;
+
+```
+
+### assets\Store\instance.jsx
+```jsx
+
+```
+
+### components\Common\Button.jsx
+```jsx
+
+```
+
+### components\Login\LoginLayout.jsx
+```jsx
+import React from "react";
+import { Outlet } from "react-router-dom";
+import "./LoginLayout.scss";
+import monster from "../../assets/image/Friendly monster waving a flag 1.png";
+
+const LoginLayout = () => {
+  return (
+    <div className="login-page">
+      <div className="login-container">
+        {/* LEFT SIDE - VISUAL */}
+        <div className="login-visual">
+          <div className="mascot-wrapper">
+            <img src={monster} alt="ReadEase Mascot" className="mascot-img" />
+          </div>
+        </div>
+
+        {/* RIGHT SIDE - FORM */}
+        <div className="login-form-section">
+          <Outlet />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default LoginLayout;
+
+```
+
+### components\Login\LoginPage\LoginPage.jsx
+```jsx
+import React, { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import AuthAPI from "../../../service/Auth/AuthAPI";
+import "./LoginPage.scss";
+
+/** Định dạng email thực tế (không chấp nhận khoảng trắng, cần domain + TLD) */
+const EMAIL_REGEX =
+  /^[a-zA-Z0-9](?:[a-zA-Z0-9._%+-]*[a-zA-Z0-9])?@[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,}$/;
+
+const MIN_PASSWORD_LEN = 6;
+const MAX_PASSWORD_LEN = 128;
+const MAX_EMAIL_LEN = 254;
+
+const validateEmail = (raw) => {
+  const value = String(raw ?? "").trim();
+  if (!value) return "Vui lòng nhập email.";
+  if (value.length > MAX_EMAIL_LEN)
+    return `Email không được vượt quá ${MAX_EMAIL_LEN} ký tự.`;
+  if (!EMAIL_REGEX.test(value)) return "Email không đúng định dạng.";
+  return null;
+};
+
+const validatePassword = (value) => {
+  const v = value ?? "";
+  if (!v.trim()) return "Vui lòng nhập mật khẩu.";
+  if (v.length < MIN_PASSWORD_LEN)
+    return `Mật khẩu phải có ít nhất ${MIN_PASSWORD_LEN} ký tự.`;
+  if (v.length > MAX_PASSWORD_LEN)
+    return `Mật khẩu không được vượt quá ${MAX_PASSWORD_LEN} ký tự.`;
+  return null;
+};
+
+const pickToken = (data) =>
+  data?.token ??
+  data?.accessToken ??
+  data?.data?.token ??
+  data?.data?.accessToken;
+
+const pickErrorMessage = (err) => {
+  const body = err?.response?.data;
+  if (!body) return err?.message || "Đăng nhập thất bại.";
+  if (typeof body.message === "string") return body.message;
+  if (Array.isArray(body.message)) return body.message.join(", ");
+  if (typeof body.error === "string") return body.error;
+  return "Đăng nhập thất bại.";
+};
+
+const LoginPage = () => {
+  const navigate = useNavigate();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [touched, setTouched] = useState({ email: false, password: false });
+  const [errors, setErrors] = useState({ email: null, password: null });
+  const [formError, setFormError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const setFieldError = (field, message) => {
+    setErrors((prev) => ({ ...prev, [field]: message }));
+  };
+
+  const handleEmailBlur = () => {
+    setTouched((t) => ({ ...t, email: true }));
+    setFieldError("email", validateEmail(email));
+  };
+
+  const handlePasswordBlur = () => {
+    setTouched((t) => ({ ...t, password: true }));
+    setFieldError("password", validatePassword(password));
+  };
+
+  const handleEmailChange = (e) => {
+    const v = e.target.value;
+    setEmail(v);
+    setFormError("");
+    if (touched.email) setFieldError("email", validateEmail(v));
+  };
+
+  const handlePasswordChange = (e) => {
+    const v = e.target.value;
+    setPassword(v);
+    setFormError("");
+    if (touched.password) setFieldError("password", validatePassword(v));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setFormError("");
+
+    const emailErr = validateEmail(email);
+    const passwordErr = validatePassword(password);
+    setTouched({ email: true, password: true });
+    setErrors({ email: emailErr, password: passwordErr });
+
+    if (emailErr || passwordErr) return;
+
+    setLoading(true);
+    try {
+      const data = await AuthAPI.login(email.trim(), password);
+      const token = pickToken(data);
+      if (token) localStorage.setItem("token", token);
+      navigate("/children");
+    } catch (err) {
+      setFormError(pickErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const showEmailError = touched.email && errors.email;
+  const showPasswordError = touched.password && errors.password;
+  const emailId = "login-email";
+  const passwordId = "login-password";
+  const emailErrId = "login-email-error";
+  const passwordErrId = "login-password-error";
+
+  return (
+    <div className="form-wrapper login-page">
+      <h1 className="title">ReadEase chào mừng bạn!</h1>
+
+      <p className="subtitle">
+        Nơi việc học tập diễn ra theo tốc độ của con bạn.
+      </p>
+
+      <form className="login-form" onSubmit={handleSubmit} noValidate>
+        {formError ? (
+          <p
+            className="login-form__error login-form__error--global"
+            role="alert"
+          >
+            {formError}
+          </p>
+        ) : null}
+
+        <div
+          className={`input-group ${showEmailError ? "input-group--invalid" : ""}`}
+        >
+          <input
+            id={emailId}
+            type="email"
+            name="email"
+            placeholder="Email đăng nhập"
+            value={email}
+            onChange={handleEmailChange}
+            onBlur={handleEmailBlur}
+            autoComplete="email"
+            aria-invalid={showEmailError ? "true" : "false"}
+            aria-describedby={showEmailError ? emailErrId : undefined}
+          />
+          {showEmailError ? (
+            <p id={emailErrId} className="input-group__error" role="alert">
+              {errors.email}
+            </p>
+          ) : null}
+        </div>
+
+        <div
+          className={`input-group ${showPasswordError ? "input-group--invalid" : ""}`}
+        >
+          <input
+            id={passwordId}
+            type="password"
+            name="password"
+            placeholder="Mật khẩu"
+            value={password}
+            onChange={handlePasswordChange}
+            onBlur={handlePasswordBlur}
+            autoComplete="current-password"
+            aria-invalid={showPasswordError ? "true" : "false"}
+            aria-describedby={showPasswordError ? passwordErrId : undefined}
+          />
+          {showPasswordError ? (
+            <p id={passwordErrId} className="input-group__error" role="alert">
+              {errors.password}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="forgot-password">
+          <a href="#forgot">Quên mật khẩu?</a>
+        </div>
+
+        <button type="submit" className="btn-login" disabled={loading}>
+          {loading ? "Đang đăng nhập..." : "Đăng nhập"}
+        </button>
+      </form>
+
+      <p className="signup-link">
+        Bạn chưa có tài khoản? <Link to="/register">Đăng ký</Link>
+      </p>
+    </div>
+  );
+};
+
+export default LoginPage;
+
+```
+
+### components\Login\RegisterPage\RegisterPage.jsx
+```jsx
+import React from "react";
+import { Link, useNavigate } from "react-router-dom";
+import "./RegisterPage.scss";
+
+const RegisterPage = () => {
+  const navigate = useNavigate();
+  return (
+    <div className="form-wrapper register-page">
+      <h1 className="title">Tạo tài khoản</h1>
+
+      <p className="subtitle">
+        Cùng ReadEase trong hành trình cải thiện khả năng đọc
+      </p>
+
+      <form className="register-form">
+        <div className="input-group">
+          <input type="text" placeholder="Họ và tên" required />
+        </div>
+
+        <div className="input-group">
+          <input type="email" placeholder="Email" required />
+        </div>
+
+        <div className="input-group">
+          <input type="text" placeholder="Tên đăng nhập" required />
+        </div>
+
+        <div className="input-group">
+          <input type="password" placeholder="Mật khẩu" required />
+        </div>
+
+        <button
+          type="submit"
+          className="btn-login"
+          onClick={() => navigate("/validate")}
+        >
+          Đăng ký
+        </button>
+      </form>
+
+      <p className="signup-link">
+        Bạn đã có tài khoản? <Link to="/login">Đăng nhập</Link>
+      </p>
+    </div>
+  );
+};
+
+export default RegisterPage;
+
+```
+
+### components\Login\RegisterPage\SelectRolePage\SelectRolePage.jsx
+```jsx
+import React, { useMemo, useState } from "react";
+import "./SelectRolePage.scss";
+import { useNavigate } from "react-router-dom";
+
+const ROLES = [
+  { id: "reader", label: "Mình là bạn đọc" },
+  { id: "guardian", label: "Mình là người bảo hộ" },
+  { id: "doctor", label: "Mình là bác sĩ" },
+];
+
+const SelectRolePage = () => {
+  const [selectedRole, setSelectedRole] = useState(null);
+  const [confirmed, setConfirmed] = useState(false);
+  const navigate = useNavigate();
+
+  // TODO: lấy username thật từ context/store
+  const userName = useMemo(() => "UserName", []);
+  const guardianName = useMemo(() => "Họ và tên người bảo hộ", []);
+
+  const handleSelect = (roleId) => {
+    setSelectedRole(roleId);
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!selectedRole) return;
+
+    if (selectedRole === "reader") {
+      setConfirmed(true);
+      return;
+    }
+
+    // TODO: xử lý submit cho các role khác nếu cần
+    setConfirmed(true);
+  };
+
+  if (confirmed && selectedRole === "reader") {
+    // Màn hình chờ người bảo hộ chấp nhận
+    return (
+      <div className="select-role-wrapper waiting-view">
+        <h1 className="title success-title">Tài khoản của bạn đã được tạo!</h1>
+
+        <p className="subtitle">Hãy chờ người bảo hộ của bạn chấp nhận nhé.</p>
+
+        <div className="guardian-box">
+          <p className="guardian-label">Người bảo hộ của bạn</p>
+          <div className="guardian-row">
+            <div className="avatar-circle">
+              <span>{guardianName.charAt(0) || "N"}</span>
+            </div>
+            <span className="guardian-name">{guardianName}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if ((confirmed && selectedRole === "guardian") || selectedRole === "doctor") {
+    return navigate("/children");
+  }
+
+  // Màn hình chọn vai trò
+  return (
+    <div className="select-role-wrapper">
+      <p className="helper-text">Chọn vai trò cho tài khoản</p>
+
+      <h1 className="title">Xin chào {userName}!</h1>
+
+      <p className="subtitle">
+        Vì đây là lần đầu bạn sử dụng, hãy cho mình biết bạn là ai nhé.
+      </p>
+
+      <form className="role-form" onSubmit={handleSubmit}>
+        <div className="role-list">
+          {ROLES.map((role) => (
+            <button
+              key={role.id}
+              type="button"
+              className={`role-item ${
+                selectedRole === role.id ? "role-item--active" : ""
+              }`}
+              onClick={() => handleSelect(role.id)}
+            >
+              <span className="role-dot" />
+              <span className="role-label">{role.label}</span>
+            </button>
+          ))}
+        </div>
+
+        <button type="submit" className="btn-confirm" disabled={!selectedRole}>
+          Xác nhận
+        </button>
+      </form>
+    </div>
+  );
+};
+
+export default SelectRolePage;
+
+```
+
+### components\Login\RegisterPage\VerifyEmailPage\VerifyEmailPage.jsx
+```jsx
+import React, { useMemo, useRef, useState } from "react";
+import "./VerifyEmailPage.scss";
+import { useNavigate } from "react-router-dom";
+
+const VerifyEmailPage = () => {
+  const codeLength = 6;
+  const [digits, setDigits] = useState(() => Array(codeLength).fill(""));
+  const inputsRef = useRef([]);
+  const navigate = useNavigate();
+  const email = useMemo(() => "email@gmail.com", []);
+
+  const focusIndex = (idx) => {
+    const el = inputsRef.current[idx];
+    if (!el) return;
+    el.focus();
+    el.select?.();
+  };
+
+  const setDigitAt = (idx, value) => {
+    setDigits((prev) => {
+      const next = [...prev];
+      next[idx] = value;
+      return next;
+    });
+  };
+
+  const handleChange = (idx) => (e) => {
+    const raw = e.target.value ?? "";
+    const onlyDigits = String(raw).replace(/\D/g, "");
+
+    if (!onlyDigits) {
+      setDigitAt(idx, "");
+      return;
+    }
+
+    // Nếu user paste nhiều số vào 1 ô, tự rải qua các ô tiếp theo
+    const chars = onlyDigits.slice(0, codeLength - idx).split("");
+    setDigits((prev) => {
+      const next = [...prev];
+      chars.forEach((c, i) => {
+        next[idx + i] = c;
+      });
+      return next;
+    });
+
+    const nextIndex = Math.min(idx + chars.length, codeLength - 1);
+    focusIndex(nextIndex);
+  };
+
+  const handleKeyDown = (idx) => (e) => {
+    if (e.key === "Backspace") {
+      if (digits[idx]) {
+        setDigitAt(idx, "");
+        return;
+      }
+      if (idx > 0) focusIndex(idx - 1);
+    }
+
+    if (e.key === "ArrowLeft" && idx > 0) focusIndex(idx - 1);
+    if (e.key === "ArrowRight" && idx < codeLength - 1) focusIndex(idx + 1);
+  };
+
+  const handlePaste = (idx) => (e) => {
+    const text = e.clipboardData?.getData("text") ?? "";
+    const onlyDigits = text.replace(/\D/g, "");
+    if (!onlyDigits) return;
+    e.preventDefault();
+
+    const chars = onlyDigits.slice(0, codeLength - idx).split("");
+    setDigits((prev) => {
+      const next = [...prev];
+      chars.forEach((c, i) => {
+        next[idx + i] = c;
+      });
+      return next;
+    });
+
+    const nextIndex = Math.min(idx + chars.length, codeLength - 1);
+    focusIndex(nextIndex);
+  };
+
+  const code = digits.join("");
+  const canSubmit = code.length === codeLength && digits.every(Boolean);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+
+    // TODO: gọi API verify OTP tại đây
+    console.log("Verify code:", code);
+  };
+
+  return (
+    <div className="validate-page">
+      <div className="validate-wrapper">
+        <h1 className="validate-title">Chờ một chút nhé,</h1>
+        <p className="validate-subtitle">
+          Một đoạn code đã gửi về <span className="email">{email}</span> của
+          bạn, vui lòng nhập vào dưới đây!
+        </p>
+
+        <form className="validate-form" onSubmit={handleSubmit}>
+          <div className="otp-row" aria-label="Mã xác thực gồm 6 chữ số">
+            {digits.map((d, idx) => (
+              <input
+                key={idx}
+                ref={(el) => {
+                  inputsRef.current[idx] = el;
+                }}
+                className="otp-input"
+                inputMode="numeric"
+                autoComplete={idx === 0 ? "one-time-code" : "off"}
+                aria-label={`Chữ số thứ ${idx + 1}`}
+                maxLength={codeLength}
+                value={d}
+                onChange={handleChange(idx)}
+                onKeyDown={handleKeyDown(idx)}
+                onPaste={handlePaste(idx)}
+              />
+            ))}
+          </div>
+
+          <button
+            className="btn-validate"
+            type="submit"
+            disabled={!canSubmit}
+            onClick={() => navigate("/select-role")}
+          >
+            Xác thực
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+export default VerifyEmailPage;
+
+```
+
+### components\Web\Children\ChildrenLayout.jsx
+```jsx
+import React, { useMemo, useState } from "react";
+import { NavLink, Outlet } from "react-router-dom";
+import "./ChildrenLayout.scss";
+import redMonster from "../../../assets/image/reading book and sitting on the grass 1.png";
+import childrenTokenIcon from "../../../assets/image/sparkles 1.png";
+
+const ChildrenLayout = () => {
+  const defaultSideStory = useMemo(
+    () => ({ kind: "default", src: redMonster, alt: "ReadEase" }),
+    [],
+  );
+  const [sideStory, setSideStory] = useState(defaultSideStory);
+
+  return (
+    <div className="children-page">
+      <div className="children-home-page">
+        <aside className="children-side">
+          <div className="children-side-hero">
+            {sideStory?.kind === "story" ? (
+              <div className="children-side-story">
+                <div className="children-side-story-cover">
+                  <img
+                    src={sideStory.src}
+                    alt={sideStory.alt}
+                    className="children-side-story-cover-img"
+                  />
+                </div>
+
+                <h3 className="children-side-story-title">{sideStory.title}</h3>
+
+                <div className="children-side-story-tags">
+                  <span className="children-side-story-tag">
+                    Truyện cổ tích
+                  </span>
+                  <span className="children-side-story-tag">Dân gian</span>
+                </div>
+
+                <p className="children-side-story-desc">
+                  {sideStory.description}
+                </p>
+
+                <button type="button" className="children-side-story-cta">
+                  Đọc ngay
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="children-side-illustration">
+                  <img
+                    src={defaultSideStory.src}
+                    alt={defaultSideStory.alt}
+                    className="children-side-illustration-img"
+                  />
+                </div>
+                <p className="children-side-text">
+                  Hôm nay bạn muốn đọc gì nào?
+                </p>
+              </>
+            )}
+          </div>
+        </aside>
+
+        <main className="children-main">
+          <header className="children-navbar">
+            <div className="children-navbar-left">
+              <div className="children-avatar">
+                <img
+                  src={redMonster}
+                  alt="Red Monster Reading Book"
+                  className="children-avatar-img"
+                />
+              </div>
+            </div>
+
+            <div className="children-navbar-center">
+              <nav className="children-nav-tabs">
+                <NavLink
+                  to="/children/profile"
+                  className={({ isActive }) =>
+                    `children-nav-link ${isActive ? "is-active" : ""}`
+                  }
+                >
+                  Hồ sơ
+                </NavLink>
+                <NavLink
+                  to="/children/library"
+                  className={({ isActive }) =>
+                    `children-nav-link ${isActive ? "is-active" : ""}`
+                  }
+                >
+                  Thư viện
+                </NavLink>
+                <NavLink
+                  to="/children/store"
+                  className={({ isActive }) =>
+                    `children-nav-link ${isActive ? "is-active" : ""}`
+                  }
+                >
+                  Cửa hàng
+                </NavLink>
+              </nav>
+            </div>
+
+            <div className="children-navbar-right children-token">
+              <span className="children-coin-amount">120</span>
+              <img
+                src={childrenTokenIcon}
+                alt="Children Token Icon"
+                className="children-coin-icon"
+              />
+            </div>
+          </header>
+
+          <section className="children-content">
+            <Outlet
+              context={{
+                setSideStory,
+                resetSideStory: () => setSideStory(defaultSideStory),
+              }}
+            />
+          </section>
+        </main>
+      </div>
+    </div>
+  );
+};
+
+export default ChildrenLayout;
+
+```
+
+### components\Web\Children\Library\LibararyPage.jsx
+```jsx
+import React from "react";
+import { useOutletContext } from "react-router-dom";
+import "./LibararyPage.scss";
+
+// TODO: sau này thay bằng data thật từ API
+const MOCK_STORIES = [
+  {
+    id: 1,
+    title: "Cây tre trăm đốt",
+    coverUrl:
+      "https://images.pexels.com/photos/5904935/pexels-photo-5904935.jpeg?auto=compress&w=600",
+  },
+  {
+    id: 2,
+    title: "Sơn Tinh Thủy Tinh",
+    coverUrl:
+      "https://images.pexels.com/photos/3225517/pexels-photo-3225517.jpeg?auto=compress&w=600",
+  },
+  {
+    id: 3,
+    title: "Cây khế trả vàng",
+    coverUrl:
+      "https://images.pexels.com/photos/2745957/pexels-photo-2745957.jpeg?auto=compress&w=600",
+  },
+  {
+    id: 4,
+    title: "Bánh chưng bánh giầy",
+    coverUrl:
+      "https://images.pexels.com/photos/3732567/pexels-photo-3732567.jpeg?auto=compress&w=600",
+  },
+  {
+    id: 5,
+    title: "Thánh Gióng",
+    coverUrl:
+      "https://images.pexels.com/photos/4619565/pexels-photo-4619565.jpeg?auto=compress&w=600",
+  },
+  {
+    id: 6,
+    title: "Sự tích dưa hấu",
+    coverUrl:
+      "https://images.pexels.com/photos/5945845/pexels-photo-5945845.jpeg?auto=compress&w=600",
+  },
+  {
+    id: 7,
+    title: "Sự tích dưa hấu",
+    coverUrl:
+      "https://images.pexels.com/photos/5945845/pexels-photo-5945845.jpeg?auto=compress&w=600",
+  },
+  {
+    id: 8,
+    title: "Sự tích dưa hấu",
+    coverUrl:
+      "https://images.pexels.com/photos/5945845/pexels-photo-5945845.jpeg?auto=compress&w=600",
+  },
+  {
+    id: 9,
+    title: "Sự tích dưa hấu",
+    coverUrl:
+      "https://images.pexels.com/photos/5945845/pexels-photo-5945845.jpeg?auto=compress&w=600",
+  },
+  {
+    id: 10,
+    title: "Sự tích dưa hấu",
+    coverUrl:
+      "https://images.pexels.com/photos/5945845/pexels-photo-5945845.jpeg?auto=compress&w=600",
+  },
+];
+
+const LibararyPage = () => {
+  const { setSideStory } = useOutletContext() ?? {};
+
+  const handleClickStory = (story) => {
+    setSideStory?.({
+      kind: "story",
+      src: story.coverUrl,
+      alt: story.title,
+      title: story.title,
+      description:
+        "“Ngày xưa, ở một làng nọ, có một anh nông phu nghèo...”",
+    });
+    console.log("Open story:", story);
+  };
+
+  return (
+    <div className="library-page">
+      <div className="library-grid">
+        {MOCK_STORIES.map((story) => (
+          <button
+            key={story.id}
+            type="button"
+            className="library-card"
+            onClick={() => handleClickStory(story)}
+          >
+            <div
+              className="library-card-cover"
+              style={{ backgroundImage: `url(${story.coverUrl})` }}
+            />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default LibararyPage;
+
+```
+
+### service\instance.jsx
+```jsx
+export { default } from "../app/instance";
+
+```
+
+### service\Auth\AuthAPI.jsx
+```jsx
+import instance from "../instance";
+
+const login = async (email, password) => {
+  try {
+    const response = await instance.post("auth/login", { email, password });
+    return response.data;
+  } catch (error) {
+    console.error("Error logging in:", error);
+    throw error;
+  }
+};
+
+const register = async (email, password, fullName, role) => {
+  try {
+    const response = await instance.post("auth/register", {
+      email,
+      password,
+      fullName,
+      role,
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error registering:", error);
+    throw error;
+  }
+};
+
+export default { login, register };
+
+```
+
+### service\Contents\ContenAPI.jsx
+```jsx
+import instance from "../instance";
+
+const getReadingStories = async () => {
+  try {
+    const response = await instance.get("reading");
+    return response.data;
+  } catch (error) {
+    console.error("Error getting reading stories:", error);
+    throw error;
+  }
+};
+
+const postReadingStory = async (title, content, difficulty, ageGroup) => {
+  try {
+    const response = await instance.post("reading", {
+      title,
+      content,
+      difficulty,
+      ageGroup,
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error posting reading story:", error);
+    throw error;
+  }
+};
+
+export default { getReadingStories, postReadingStory };
+
+```
+
+### service\Health\HealthAPI.jsx
+```jsx
+import instance from "../instance";
+
+const getHealth = async () => {
+  try {
+    const response = await instance.get("health");
+    return response.data;
+  } catch (error) {
+    console.error("Error getting health:", error);
+    throw error;
+  }
+};
+
+export default { getHealth };
+
+```
+
+### service\Users\UsersAPI.jsx
+```jsx
+import instance from "../instance";
+const getProfile = async () => {
+  try {
+    const response = await instance.get("users/me");
+    return response.data;
+  } catch (error) {
+    console.error("Error getting profile:", error);
+    throw error;
+  }
+};
+
+export default { getProfile };
+
+```
