@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import "./CalibrationStartPage.scss";
 import flyingBee from "../../../../assets/image/flying bee.png";
 import gameBee from "../../../../assets/image/output-onlinegiftools.gif";
 import sparklesIcon from "../../../../assets/image/sparkles 1.png";
+import CalibrationAPI from "../../../../service/Calibration/CalibrationAPI";
 
 const GAME_DURATION = 30;
 const BEE_RESPAWN_DELAY = 500;
@@ -27,6 +29,7 @@ const getRandomBeePosition = (container) => {
 const formatTime = (secondsLeft) => `00:${String(secondsLeft).padStart(2, "0")}`;
 
 const CalibrationStartPage = () => {
+  const navigate = useNavigate();
   const containerRef = useRef(null);
   const movementStateRef = useRef({
     dx: 2.2,
@@ -36,6 +39,7 @@ const CalibrationStartPage = () => {
   });
   const hoverCooldownRef = useRef(false);
   const capturedEventsRef = useRef([]);
+  const calibrationSubmittingRef = useRef(false);
 
   const [phase, setPhase] = useState("start");
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
@@ -59,6 +63,7 @@ const CalibrationStartPage = () => {
     setTimeLeft(GAME_DURATION);
     capturedEventsRef.current = [];
     hoverCooldownRef.current = false;
+    calibrationSubmittingRef.current = false;
     setBeeVisible(true);
 
     const container = containerRef.current?.getBoundingClientRect();
@@ -72,6 +77,22 @@ const CalibrationStartPage = () => {
     }
 
     setPhase("playing");
+  };
+
+  const submitCalibration = async () => {
+    if (calibrationSubmittingRef.current) return;
+
+    calibrationSubmittingRef.current = true;
+
+    try {
+      await CalibrationAPI.calibrateSessionAPI({
+        events: capturedEventsRef.current,
+        duration: GAME_DURATION * 1000,
+        gameType: "target_tracking",
+      });
+    } catch (error) {
+      console.error("Calibration submit failed:", error);
+    }
   };
 
   const handleMouseMove = (event) => {
@@ -239,15 +260,36 @@ const CalibrationStartPage = () => {
   useEffect(() => {
     if (phase !== "playing" || timeLeft > 0) return;
 
-    setPhase("success");
+    let isActive = true;
+
+    const finalizeCalibration = async () => {
+      await submitCalibration();
+      if (isActive) {
+        setPhase("success");
+      }
+    };
+
+    finalizeCalibration();
+
+    return () => {
+      isActive = false;
+    };
   }, [phase, timeLeft]);
 
+  useEffect(() => {
+    if (phase !== "success") return undefined;
+
+    const redirectTimeout = window.setTimeout(() => {
+      navigate("/children/library");
+    }, 2500);
+
+    return () => {
+      window.clearTimeout(redirectTimeout);
+    };
+  }, [phase, navigate]);
+
   const handleStartReading = () => {
-    // Placeholder until the reading page route is finalized.
-    console.log("Start reading with reward", {
-      score,
-      capturedEvents: capturedEventsRef.current.length,
-    });
+    navigate("/children/library");
   };
 
   return (
