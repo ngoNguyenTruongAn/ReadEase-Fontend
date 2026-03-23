@@ -6,6 +6,8 @@ import VerifyEmailPage from "./components/Login/RegisterPage/VerifyEmailPage/Ver
 import SelectRolePage from "./components/Login/RegisterPage/SelectRolePage/SelectRolePage";
 import ChildrenLayout from "./components/Web/Children/ChildrenLayout";
 import LibararyPage from "./components/Web/Children/Library/LibararyPage";
+import StorePage from "./components/Web/Children/Store/StorePage";
+import ProfileLayout from "./components/Web/Profile/ProfileLayout";
 // import HomePage from "./components/Web/Children/ChildrenLayout";
 
 function App() {
@@ -22,9 +24,9 @@ function App() {
 
       {/* children */}
       <Route path="/children" element={<ChildrenLayout />}>
-        {/* <Route path="/children/profile" element={<ProfilePage />} /> */}
+        <Route path="/children/profile" element={<ProfileLayout />} />
         <Route path="/children/library" element={<LibararyPage />} />
-        {/* <Route path="/children/store" element={<StorePage />} /> */}
+        <Route path="/children/store" element={<StorePage />} />
       </Route>
     </Routes>
   );

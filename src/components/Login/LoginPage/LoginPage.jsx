@@ -31,10 +31,12 @@ const validatePassword = (value) => {
 };
 
 const pickToken = (data) =>
-  data?.token ??
+  data?.access_token ??
   data?.accessToken ??
-  data?.data?.token ??
-  data?.data?.accessToken;
+  data?.token ??
+  data?.data?.access_token ??
+  data?.data?.accessToken ??
+  data?.data?.token;
 
 const pickErrorMessage = (err) => {
   const body = err?.response?.data;
@@ -97,7 +99,9 @@ const LoginPage = () => {
     try {
       const data = await AuthAPI.loginAPI(email.trim(), password);
       const token = pickToken(data);
-      if (token) localStorage.setItem("token", token);
+      if (token) {
+        localStorage.setItem("access_token", token);
+      }
       navigate("/children");
     } catch (err) {
       setFormError(pickErrorMessage(err));

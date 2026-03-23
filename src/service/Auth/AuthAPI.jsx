@@ -35,4 +35,14 @@ const verifyOTPAPI = async (email, code) => {
   }
 };
 
-export default { loginAPI, registerAPI, verifyOTPAPI };
+const getProfileAPI = async () => {
+  try {
+    const response = await instance.get("auth/profile");
+    return response.data;
+  } catch (error) {
+    console.error("Error getting profile API:", error);
+    throw error;
+  }
+};
+
+export default { loginAPI, registerAPI, verifyOTPAPI, getProfileAPI };
