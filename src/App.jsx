@@ -6,8 +6,12 @@ import VerifyEmailPage from "./components/Login/RegisterPage/VerifyEmailPage/Ver
 import SelectRolePage from "./components/Login/RegisterPage/SelectRolePage/SelectRolePage";
 import ChildrenLayout from "./components/Web/Children/ChildrenLayout";
 import LibararyPage from "./components/Web/Children/Library/LibararyPage";
+<<<<<<< HEAD
 import StorePage from "./components/Web/Children/Store/StorePage";
 import ProfileLayout from "./components/Web/Profile/ProfileLayout";
+=======
+import CalibrationStartPage from "./components/Web/Children/CalibrationStart/CalibrationStartPage";
+>>>>>>> origin/An
 // import HomePage from "./components/Web/Children/ChildrenLayout";
 
 function App() {
@@ -24,10 +28,22 @@ function App() {
 
       {/* children */}
       <Route path="/children" element={<ChildrenLayout />}>
+<<<<<<< HEAD
         <Route path="/children/profile" element={<ProfileLayout />} />
         <Route path="/children/library" element={<LibararyPage />} />
         <Route path="/children/store" element={<StorePage />} />
+=======
+        {/* <Route path="/children/profile" element={<ProfilePage />} /> */}
+        <Route path="library" element={<LibararyPage />} />
+        {/* <Route path="/children/store" element={<StorePage />} /> */}
+>>>>>>> origin/An
       </Route>
+
+      {/* standalone calibration */}
+      <Route
+        path="/children/calibration/start"
+        element={<CalibrationStartPage />}
+      />
     </Routes>
   );
 }
