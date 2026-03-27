@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import "./CalibrationStartPage.scss";
 import flyingBee from "../../../../assets/image/flying bee.png";
 import gameBee from "../../../../assets/image/output-onlinegiftools.gif";
 import sparklesIcon from "../../../../assets/image/sparkles 1.png";
 import CalibrationAPI from "../../../../service/Calibration/CalibrationAPI";
+import { getSelectedStory } from "../Reading/readingUtils";
 
 const GAME_DURATION = 30;
 const BEE_RESPAWN_DELAY = 500;
@@ -30,6 +31,7 @@ const formatTime = (secondsLeft) => `00:${String(secondsLeft).padStart(2, "0")}`
 
 const CalibrationStartPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const containerRef = useRef(null);
   const movementStateRef = useRef({
     dx: 2.2,
@@ -57,6 +59,7 @@ const CalibrationStartPage = () => {
     y: 0,
     pulse: 0,
   });
+  const selectedStory = location.state?.story ?? getSelectedStory();
 
   const handleStart = () => {
     setScore(0);
@@ -280,16 +283,20 @@ const CalibrationStartPage = () => {
     if (phase !== "success") return undefined;
 
     const redirectTimeout = window.setTimeout(() => {
-      navigate("/children/library");
+      navigate("/children/reading", {
+        state: { story: selectedStory },
+      });
     }, 2500);
 
     return () => {
       window.clearTimeout(redirectTimeout);
     };
-  }, [phase, navigate]);
+  }, [phase, navigate, selectedStory]);
 
   const handleStartReading = () => {
-    navigate("/children/library");
+    navigate("/children/reading", {
+      state: { story: selectedStory },
+    });
   };
 
   return (

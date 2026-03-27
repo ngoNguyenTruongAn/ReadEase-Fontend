@@ -1,5 +1,6 @@
 import React from "react";
-import { useOutletContext } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
+import { saveSelectedStory } from "../Reading/readingUtils";
 import "./LibararyPage.scss";
 
 // TODO: sau này thay bằng data thật từ API
@@ -67,9 +68,17 @@ const MOCK_STORIES = [
 ];
 
 const LibararyPage = () => {
+  const navigate = useNavigate();
   const { setSideStory } = useOutletContext() ?? {};
 
   const handleClickStory = (story) => {
+    const selectedStory = {
+      id: story.id,
+      title: story.title,
+      coverUrl: story.coverUrl,
+      description: "Ngày xưa, ở một làng nọ, có một anh nông phu nghèo.",
+    };
+
     setSideStory?.({
       kind: "story",
       src: story.coverUrl,
@@ -78,7 +87,11 @@ const LibararyPage = () => {
       description:
         "“Ngày xưa, ở một làng nọ, có một anh nông phu nghèo...”",
     });
-    console.log("Open story:", story);
+
+    saveSelectedStory(selectedStory);
+    navigate("/children/calibration/start", {
+      state: { story: selectedStory },
+    });
   };
 
   return (
