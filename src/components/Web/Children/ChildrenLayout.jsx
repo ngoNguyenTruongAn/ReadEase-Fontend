@@ -4,6 +4,7 @@ import "./ChildrenLayout.scss";
 import redMonster from "../../../assets/image/reading book and sitting on the grass 1.png";
 import childrenTokenIcon from "../../../assets/image/sparkles 1.png";
 import { FaFilter } from "react-icons/fa";
+import AuthAPI from "../../../service/Auth/AuthAPI";
 
 const ChildrenLayout = () => {
   const defaultSideStory = useMemo(
@@ -14,9 +15,11 @@ const ChildrenLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const isStoreRoute = location.pathname.startsWith("/children/store");
+  const isProfileRoute = location.pathname.startsWith("/children/profile");
   const [storeFilter, setStoreFilter] = useState("profession");
   const [storeFilterOpen, setStoreFilterOpen] = useState(false);
   const storeFilterWrapRef = useRef(null);
+  const [profileGreetingName, setProfileGreetingName] = useState("");
 
   const STORE_FILTERS = [
     { id: "profession", label: "Nghề nghiệp" },
@@ -87,6 +90,45 @@ const ChildrenLayout = () => {
     }
   }, [location.pathname, navigate]);
 
+  useEffect(() => {
+    if (!isProfileRoute) return;
+
+    let cancelled = false;
+    //lấy tên từ hồ sơ
+    const loadProfileName = async () => {
+      try {
+        const data = await AuthAPI.getProfileAPI();
+        const root = data?.data ?? data?.user ?? data;
+        const name =
+          root?.displayName ??
+          root?.fullName ??
+          root?.userName ??
+          root?.username ??
+          root?.name ??
+          root?.email ??
+          "";
+        if (!cancelled) setProfileGreetingName(name);
+      } catch {
+        if (!cancelled) setProfileGreetingName("");
+      }
+    };
+
+    loadProfileName();
+    return () => {
+      cancelled = true;
+    };
+  }, [isProfileRoute]);
+
+  const handleLogout = () => {
+    // Dọn sạch token để axios interceptor không gắn Authorization nữa.
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("token");
+    localStorage.removeItem("accessToken");
+
+    setStoreFilterOpen(false);
+    navigate("/login", { replace: true });
+  };
+
   return (
     <div className="children-page">
       <div className="children-home-page">
@@ -128,7 +170,16 @@ const ChildrenLayout = () => {
                     className="children-side-illustration-img"
                   />
                 </div>
-                {isStoreRoute ? (
+                {isProfileRoute ? (
+                  <div className="children-side-greeting">
+                    <p className="children-side-text children-side-greeting-title">
+                      Chào
+                    </p>
+                    <p className="children-side-text children-side-greeting-name">
+                      {profileGreetingName || "bạn"}!
+                    </p>
+                  </div>
+                ) : isStoreRoute ? (
                   <div className="children-side-store">
                     <p className="children-side-text children-side-store-title">
                       Cửa hàng nhân vật
@@ -228,6 +279,14 @@ const ChildrenLayout = () => {
                 alt="Children Token Icon"
                 className="children-coin-icon"
               />
+
+              <button
+                type="button"
+                className="children-logout-btn"
+                onClick={handleLogout}
+              >
+                Đăng xuất
+              </button>
             </div>
           </header>
 

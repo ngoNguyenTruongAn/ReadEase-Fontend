@@ -17,7 +17,7 @@
 
 .children-side {
   width: 260px;
-  background: $bg-visual;
+  background: rgba($bg-visual, 0.2);
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -55,6 +55,23 @@
   color: $primary-color;
   font-weight: 800;
   font-size: 1.4rem;
+}
+
+.children-side-greeting {
+  text-align: center;
+  width: 100%;
+}
+
+.children-side-greeting-title {
+  margin: 0 0 6px;
+}
+
+.children-side-greeting-name {
+  margin: 0;
+  font-size: 1.2rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .children-side-store {
@@ -168,7 +185,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 32px;
-  background: #d4eeeb;
+  background: rgba($bg-navbar, 0.7);
   position: sticky;
   top: 16px;
   z-index: 10;
@@ -328,7 +345,9 @@
   color: currentColor;
   opacity: 0.95;
   transform: translateY(1px);
-  transition: transform 0.2s ease, opacity 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
 }
 
 .children-nav-link:hover .children-filter-icon {
@@ -342,6 +361,30 @@
   gap: 6px;
   font-weight: 700;
   color: $primary-color;
+}
+
+.children-logout-btn {
+  margin-left: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 2px solid rgba($primary-color, 0.35);
+  background: rgba(255, 255, 255, 0.75);
+  color: $primary-color;
+  font-weight: 900;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    background 0.2s ease,
+    color 0.2s ease;
+
+  &:hover {
+    background: #ffffff;
+    transform: translateY(-1px);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
 }
 
 .children-coin-icon {

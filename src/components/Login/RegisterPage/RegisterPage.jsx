@@ -53,9 +53,11 @@ const RegisterPage = () => {
         message: error?.message,
       });
       const message =
+        (Array.isArray(body?.error?.details) && body.error.details[0]) ||
+        (typeof body?.error?.message === "string" && body.error.message) ||
         (typeof body?.message === "string" && body.message) ||
         (Array.isArray(body?.message) && body.message.join(", ")) ||
-        body?.error ||
+        (typeof body?.error === "string" && body.error) ||
         error?.message ||
         "Đăng ký thất bại.";
       window.alert(message);

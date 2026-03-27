@@ -102,7 +102,7 @@ const LoginPage = () => {
       if (token) {
         localStorage.setItem("access_token", token);
       }
-      navigate("/children");
+      navigate("/children/profile");
     } catch (err) {
       setFormError(pickErrorMessage(err));
     } finally {
@@ -119,9 +119,11 @@ const LoginPage = () => {
 
   return (
     <div className="form-wrapper login-page">
-      <h1 className="title">ReadEase chào mừng bạn!</h1>
+      <h1 className="title">
+        <span style={{ color: "#FBBF24" }}>ReadEase</span> chào mừng bạn!
+      </h1>
 
-      <p className="subtitle">
+      <p className="subtitle subtitle--bold">
         Nơi việc học tập diễn ra theo tốc độ của con bạn.
       </p>
 
@@ -183,12 +185,17 @@ const LoginPage = () => {
           <a href="#forgot">Quên mật khẩu?</a>
         </div>
 
-        <button type="submit" className="btn-login" disabled={loading}>
+        <button
+          type="submit"
+          className="btn-login"
+          disabled={loading}
+          style={{ background: "#FBBF24" }}
+        >
           {loading ? "Đang đăng nhập..." : "Đăng nhập"}
         </button>
       </form>
 
-      <p className="signup-link">
+      <p className="signup-link" style={{ fontWeight: "bold" }}>
         Bạn chưa có tài khoản? <Link to="/register">Đăng ký</Link>
       </p>
     </div>

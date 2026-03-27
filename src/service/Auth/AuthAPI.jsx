@@ -20,8 +20,25 @@ const registerAPI = async (email, password, displayName, role) => {
     });
     return response.data;
   } catch (error) {
-    console.error("Error registering:", error);
-    throw error;
+    const apiError = error?.response?.data?.error;
+    const message =
+      (Array.isArray(apiError?.details) && apiError.details[0]) ||
+      apiError?.message ||
+      error?.response?.data?.message ||
+      error?.message ||
+      "Đăng ký thất bại";
+
+    const normalizedError = new Error(message);
+    normalizedError.response = error?.response;
+    normalizedError.code = apiError?.code || error?.code;
+
+    console.error("Error registering:", {
+      message,
+      code: normalizedError.code,
+      status: error?.response?.status,
+      data: error?.response?.data,
+    });
+    throw normalizedError;
   }
 };
 
