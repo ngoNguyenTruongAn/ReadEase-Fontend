@@ -12,16 +12,24 @@ const ReadingAssistControls = ({
         type="button"
         className={`reading-assist-btn ${isBionicEnabled ? "is-active" : ""}`}
         onClick={onToggleBionic}
+        aria-pressed={isBionicEnabled}
       >
-        B
+        <span className="reading-assist-short" aria-hidden="true">
+          B
+        </span>
+        <span className="reading-assist-full">Bionic Reading</span>
       </button>
 
       <button
         type="button"
         className={`reading-assist-btn ${isHoverSpeechEnabled ? "is-active" : ""}`}
         onClick={onToggleHoverSpeech}
+        aria-pressed={isHoverSpeechEnabled}
       >
-        H
+        <span className="reading-assist-short" aria-hidden="true">
+          H
+        </span>
+        <span className="reading-assist-full">Hover to Speech</span>
       </button>
     </div>
   );
