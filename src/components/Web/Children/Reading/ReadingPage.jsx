@@ -6,6 +6,7 @@ import ReadingAssistControls from "./components/ReadingAssistControls";
 import ReadingBookView from "./components/ReadingBookView";
 import ReadingPagination from "./components/ReadingPagination";
 import ReadingScorePanel from "./components/ReadingScorePanel";
+import useHoverSpeech from "./hooks/useHoverSpeech";
 import {
   getSelectedStory,
   normalizeStoryPayload,
@@ -56,6 +57,15 @@ const ReadingPage = () => {
   const [score, setScore] = useState(0);
   const [avatarUrl, setAvatarUrl] = useState("");
 
+  const {
+    handleHoverStart: handleHoverSpeechStart,
+    handleHoverEnd: handleHoverSpeechEnd,
+    stop: stopHoverSpeech,
+  } = useHoverSpeech({
+    enabled: isHoverSpeechEnabled,
+    language: "vi-VN",
+  });
+
   useEffect(() => {
     let isMounted = true;
 
@@ -66,7 +76,7 @@ const ReadingPage = () => {
 
       return () => {
         isMounted = false;
-        window.speechSynthesis?.cancel();
+        stopHoverSpeech();
       };
     }
 
@@ -115,9 +125,9 @@ const ReadingPage = () => {
 
     return () => {
       isMounted = false;
-      window.speechSynthesis?.cancel();
+      stopHoverSpeech();
     };
-  }, [selectedStory]);
+  }, [selectedStory, stopHoverSpeech]);
 
   useEffect(() => {
     setCurrentPage(0);
@@ -125,21 +135,7 @@ const ReadingPage = () => {
 
   const totalPages = story.pages.length;
   const pageText = story.pages[currentPage] ?? "";
-
-  const handleHoverSpeechStart = () => {
-    if (!isHoverSpeechEnabled || !pageText) return;
-    if (!("speechSynthesis" in window)) return;
-
-    const utterance = new SpeechSynthesisUtterance(pageText);
-    utterance.lang = "vi-VN";
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const handleHoverSpeechEnd = () => {
-    if (!isHoverSpeechEnabled) return;
-    window.speechSynthesis?.cancel();
-  };
+  const pageHoverUnits = story?.hoverSpeechUnits?.[currentPage] ?? null;
 
   return (
     <div className="reading-page-shell">
@@ -161,8 +157,10 @@ const ReadingPage = () => {
           <ReadingBookView
             pageText={pageText}
             useBionic={isBionicEnabled}
-            onHoverStart={handleHoverSpeechStart}
-            onHoverEnd={handleHoverSpeechEnd}
+            isHoverSpeechEnabled={isHoverSpeechEnabled}
+            backendHoverUnits={pageHoverUnits}
+            onWordHoverStart={handleHoverSpeechStart}
+            onWordHoverEnd={handleHoverSpeechEnd}
           />
 
           <ReadingScorePanel avatarUrl={avatarUrl} score={score} />
@@ -172,9 +170,7 @@ const ReadingPage = () => {
           currentPage={currentPage}
           totalPages={totalPages}
           onPrevPage={() => setCurrentPage((prev) => Math.max(prev - 1, 0))}
-          onNextPage={() =>
-            setCurrentPage((prev) => Math.min(prev + 1, totalPages - 1))
-          }
+          onNextPage={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages - 1))}
         />
       </div>
     </div>

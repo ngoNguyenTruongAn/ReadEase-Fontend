@@ -164,6 +164,21 @@
   display: inline;
 }
 
+.reading-hover-unit {
+  display: inline;
+}
+
+.reading-book-view.is-hover-speech-enabled .reading-hover-unit {
+  cursor: pointer;
+}
+
+.reading-book-view.is-hover-speech-enabled .reading-hover-unit:hover {
+  text-decoration-line: underline;
+  text-decoration-color: $primary-color;
+  text-decoration-thickness: 10%;
+  text-underline-offset: 15%;
+}
+
 .reading-score-panel {
   display: flex;
   flex-direction: column;
