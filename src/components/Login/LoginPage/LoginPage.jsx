@@ -38,6 +38,12 @@ const pickToken = (data) =>
   data?.data?.accessToken ??
   data?.data?.token;
 
+const pickRefreshToken = (data) =>
+  data?.refresh_token ??
+  data?.refreshToken ??
+  data?.data?.refresh_token ??
+  data?.data?.refreshToken;
+
 const pickErrorMessage = (err) => {
   const body = err?.response?.data;
   if (!body) return err?.message || "Đăng nhập thất bại.";
@@ -99,8 +105,12 @@ const LoginPage = () => {
     try {
       const data = await AuthAPI.loginAPI(email.trim(), password);
       const token = pickToken(data);
+      const refreshToken = pickRefreshToken(data);
       if (token) {
         localStorage.setItem("access_token", token);
+      }
+      if (refreshToken) {
+        localStorage.setItem("refresh_token", refreshToken);
       }
       navigate("/children/profile");
     } catch (err) {

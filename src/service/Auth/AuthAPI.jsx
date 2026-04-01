@@ -62,4 +62,20 @@ const getProfileAPI = async () => {
   }
 };
 
-export default { loginAPI, registerAPI, verifyOTPAPI, getProfileAPI };
+const refreshTokenAPI = async (refreshToken) => {
+  try {
+    const response = await instance.post("auth/refresh", { refreshToken });
+    return response.data;
+  } catch (error) {
+    console.error("Error refreshing token:", error);
+    throw error;
+  }
+};
+
+export default {
+  loginAPI,
+  registerAPI,
+  verifyOTPAPI,
+  getProfileAPI,
+  refreshTokenAPI,
+};

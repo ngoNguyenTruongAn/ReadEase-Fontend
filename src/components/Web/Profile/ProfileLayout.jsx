@@ -159,7 +159,7 @@ const ProfileLayout = () => {
     },
   ];
 
-  const topAchievements = achievements.slice(0, 10);
+  const topAchievements = achievements.slice(0, 5);
 
   const collection = [
     { id: "c1", image: knightImg, name: "Kỵ sĩ ánh sáng" },
@@ -175,7 +175,7 @@ const ProfileLayout = () => {
       <section className="profile-achievement">
         <h2 className="profile-section-title">
           Thành tích{" "}
-          <span style={{ fontWeight: "bold", color: "#FBBF24" }}> Top 10</span>
+          <span style={{ fontWeight: "bold", color: "#FBBF24" }}> Top 5</span>
         </h2>
 
         <div className="profile-achievement-card">

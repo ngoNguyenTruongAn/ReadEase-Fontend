@@ -49,12 +49,14 @@
   display: block;
   object-fit: contain;
   object-position: center;
+  margin-top: 100px;
 }
 
 .children-side-text {
-  color: $primary-color;
+  color: $text-bg;
   font-weight: 800;
-  font-size: 1.4rem;
+  font-size: 2rem;
+  padding: 0 15px;
 }
 
 .children-side-greeting {
@@ -119,7 +121,7 @@
 .children-side-story-title {
   margin: 0 0 10px;
   color: $text-main;
-  font-size: 1.05rem;
+  font-size: 2.5rem;
   font-weight: 900;
   text-transform: uppercase;
   line-height: 1.15;
@@ -136,16 +138,14 @@
   padding: 4px 8px;
   border-radius: 999px;
   border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(255, 255, 255, 0.65);
-  font-size: 0.72rem;
-  color: $text-secondary;
-  font-weight: 600;
+  background: rgba($text-tag, 0.35);
+  font-size: 1rem;
 }
 
 .children-side-story-desc {
   margin: 0 0 14px;
   color: $text-main;
-  font-size: 0.86rem;
+  font-size: 1rem;
   line-height: 1.35;
   display: -webkit-box;
   line-clamp: 4;
@@ -338,6 +338,12 @@
     color: $primary-color;
     font-weight: 700;
   }
+}
+
+.children-nav-link--button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
 }
 
 .children-filter-icon {

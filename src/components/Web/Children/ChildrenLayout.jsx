@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import "./ChildrenLayout.scss";
 import redMonster from "../../../assets/image/reading book and sitting on the grass 1.png";
 import childrenTokenIcon from "../../../assets/image/sparkles 1.png";
+import monsterStore from "../../../assets/image/MonterStore.png";
 import { FaFilter } from "react-icons/fa";
 import AuthAPI from "../../../service/Auth/AuthAPI";
 
@@ -20,6 +21,7 @@ const ChildrenLayout = () => {
   const [storeFilterOpen, setStoreFilterOpen] = useState(false);
   const storeFilterWrapRef = useRef(null);
   const [profileGreetingName, setProfileGreetingName] = useState("");
+  const showStoreSidebar = isStoreRoute;
 
   const STORE_FILTERS = [
     { id: "profession", label: "Nghề nghiệp" },
@@ -28,7 +30,7 @@ const ChildrenLayout = () => {
   ];
 
   useEffect(() => {
-    if (!isStoreRoute || !storeFilterOpen) return;
+    if (!storeFilterOpen) return;
 
     const onDocMouseDown = (e) => {
       const el = storeFilterWrapRef.current;
@@ -39,7 +41,7 @@ const ChildrenLayout = () => {
 
     document.addEventListener("mousedown", onDocMouseDown);
     return () => document.removeEventListener("mousedown", onDocMouseDown);
-  }, [isStoreRoute, storeFilterOpen]);
+  }, [storeFilterOpen]);
 
   useEffect(() => {
     // Chỉ check khi đang ở luồng /children (vào thẳng từ URL cũng áp dụng).
@@ -83,10 +85,44 @@ const ChildrenLayout = () => {
     })();
 
     if (isExpired) {
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("token");
-      localStorage.removeItem("accessToken");
-      navigate("/login", { replace: true });
+      const refreshToken =
+        localStorage.getItem("refresh_token") ||
+        localStorage.getItem("refreshToken");
+
+      if (!refreshToken) {
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("token");
+        localStorage.removeItem("accessToken");
+        navigate("/login", { replace: true });
+        return;
+      }
+
+      AuthAPI.refreshTokenAPI(refreshToken)
+        .then((data) => {
+          const newAccess =
+            data?.access_token ??
+            data?.accessToken ??
+            data?.token ??
+            data?.data?.access_token ??
+            data?.data?.accessToken ??
+            data?.data?.token;
+          const newRefresh =
+            data?.refresh_token ??
+            data?.refreshToken ??
+            data?.data?.refresh_token ??
+            data?.data?.refreshToken;
+
+          if (newAccess) localStorage.setItem("access_token", newAccess);
+          if (newRefresh) localStorage.setItem("refresh_token", newRefresh);
+        })
+        .catch(() => {
+          localStorage.removeItem("access_token");
+          localStorage.removeItem("token");
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("refresh_token");
+          localStorage.removeItem("refreshToken");
+          navigate("/login", { replace: true });
+        });
     }
   }, [location.pathname, navigate]);
 
@@ -134,64 +170,85 @@ const ChildrenLayout = () => {
       <div className="children-home-page">
         <aside className="children-side">
           <div className="children-side-hero">
-            {sideStory?.kind === "story" ? (
-              <div className="children-side-story">
-                <div className="children-side-story-cover">
-                  <img
-                    src={sideStory.src}
-                    alt={sideStory.alt}
-                    className="children-side-story-cover-img"
-                  />
-                </div>
-
-                <h3 className="children-side-story-title">{sideStory.title}</h3>
-
-                <div className="children-side-story-tags">
-                  <span className="children-side-story-tag">
-                    Truyện cổ tích
-                  </span>
-                  <span className="children-side-story-tag">Dân gian</span>
-                </div>
-
-                <p className="children-side-story-desc">
-                  {sideStory.description}
-                </p>
-
-                <button type="button" className="children-side-story-cta">
-                  Đọc ngay
-                </button>
-              </div>
-            ) : (
+            {showStoreSidebar ? (
               <>
                 <div className="children-side-illustration">
                   <img
-                    src={defaultSideStory.src}
-                    alt={defaultSideStory.alt}
+                    src={monsterStore}
+                    alt="Cửa hàng"
                     className="children-side-illustration-img"
                   />
                 </div>
+
+                <div className="children-side-store">
+                  <p className="children-side-text children-side-store-title">
+                    Cửa hàng nhân vật
+                  </p>
+                  <p className="children-side-store-subtitle">
+                    Chọn nhóm bạn muốn xem
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
                 {isProfileRoute ? (
-                  <div className="children-side-greeting">
-                    <p className="children-side-text children-side-greeting-title">
-                      Chào
+                  <>
+                    <div className="children-side-illustration">
+                      <img
+                        src={defaultSideStory.src}
+                        alt={defaultSideStory.alt}
+                        className="children-side-illustration-img"
+                      />
+                    </div>
+                    <div className="children-side-greeting">
+                      <p className="children-side-text children-side-greeting-title">
+                        Chào
+                      </p>
+                      <p className="children-side-text children-side-greeting-name">
+                        {profileGreetingName || "bạn"}!
+                      </p>
+                    </div>
+                  </>
+                ) : sideStory?.kind === "story" ? (
+                  <div className="children-side-story">
+                    <div className="children-side-story-cover">
+                      <img
+                        src={sideStory.src}
+                        alt={sideStory.alt}
+                        className="children-side-story-cover-img"
+                      />
+                    </div>
+
+                    <h3 className="children-side-story-title">{sideStory.title}</h3>
+
+                    <div className="children-side-story-tags">
+                      <span className="children-side-story-tag">
+                        Truyện cổ tích
+                      </span>
+                      <span className="children-side-story-tag">Dân gian</span>
+                    </div>
+
+                    <p className="children-side-story-desc">
+                      {sideStory.description}
                     </p>
-                    <p className="children-side-text children-side-greeting-name">
-                      {profileGreetingName || "bạn"}!
-                    </p>
-                  </div>
-                ) : isStoreRoute ? (
-                  <div className="children-side-store">
-                    <p className="children-side-text children-side-store-title">
-                      Cửa hàng nhân vật
-                    </p>
-                    <p className="children-side-store-subtitle">
-                      Chọn nhóm bạn muốn xem
-                    </p>
+
+                    <button type="button" className="children-side-story-cta">
+                      Đọc ngay
+                    </button>
                   </div>
                 ) : (
-                  <p className="children-side-text">
-                    Hôm nay bạn muốn đọc gì nào?
-                  </p>
+                  <>
+                    <div className="children-side-illustration">
+                      <img
+                        src={defaultSideStory.src}
+                        alt={defaultSideStory.alt}
+                        className="children-side-illustration-img"
+                      />
+                    </div>
+                    <p className="children-side-text">
+                      Hôm nay bạn muốn đọc gì nào?
+                    </p>
+                  </>
                 )}
               </>
             )}
@@ -225,6 +282,7 @@ const ChildrenLayout = () => {
                   className={({ isActive }) =>
                     `children-nav-link ${isActive ? "is-active" : ""}`
                   }
+                  onClick={() => setSideStory(defaultSideStory)}
                 >
                   Thư viện
                 </NavLink>
@@ -232,26 +290,27 @@ const ChildrenLayout = () => {
                   ref={storeFilterWrapRef}
                   className="children-store-filter-wrap"
                 >
-                  <div
-                    className={`children-store-nav-trigger ${isStoreRoute ? "is-active" : ""}`}
-                    onClick={() => {
-                      if (isStoreRoute) {
-                        setStoreFilterOpen(!storeFilterOpen);
-                      }
-                    }}
-                  >
-                    <NavLink
-                      to="/children/store"
-                      className={({ isActive }) =>
-                        `children-nav-link ${isActive ? "is-active" : ""}`
-                      }
+                  <div className={`children-store-nav-trigger ${isStoreRoute ? "is-active" : ""}`}>
+                    <button
+                      type="button"
+                      className={`children-nav-link children-nav-link--button ${
+                        isStoreRoute ? "is-active" : ""
+                      }`}
+                      aria-haspopup="menu"
+                      aria-expanded={storeFilterOpen ? "true" : "false"}
+                      onClick={() => {
+                        // Click vào "Cửa hàng" luôn mở dropdown để preview (không chuyển trang).
+                        // Nếu đang ở store thì toggle dropdown.
+                        if (isStoreRoute) setStoreFilterOpen((v) => !v);
+                        else setStoreFilterOpen(true);
+                      }}
                     >
                       Cửa hàng
                       <FaFilter className="children-filter-icon" />
-                    </NavLink>
+                    </button>
                   </div>
 
-                  {isStoreRoute && storeFilterOpen && (
+                  {storeFilterOpen && (
                     <div className="children-store-filter-dropdown">
                       <div className="children-store-filter-list">
                         {STORE_FILTERS.map((filter) => (
@@ -260,7 +319,11 @@ const ChildrenLayout = () => {
                             className={`children-store-filter-item ${
                               storeFilter === filter.id ? "is-active" : ""
                             }`}
-                            onClick={() => setStoreFilter(filter.id)}
+                            onClick={() => {
+                              setStoreFilter(filter.id);
+                              setStoreFilterOpen(false);
+                              if (!isStoreRoute) navigate("/children/store");
+                            }}
                           >
                             {filter.label}
                           </button>
