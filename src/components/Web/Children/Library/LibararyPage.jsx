@@ -76,7 +76,7 @@ const LibararyPage = () => {
       alt: story.title,
       title: story.title,
       description:
-        "“Ngày xưa, ở một làng nọ, có một anh nông phu nghèo...”",
+        "“Ngày xưa, ở một làng nọ, có một anh nông phu nghèo...Ngày xưa, ở một làng nọ, có một anh nông phu nghèo...Ngày xưa, ở một làng nọ, có một anh nông phu nghèo...Ngày xưa, ở một làng nọ, có một anh nông phu nghèo...”",
     });
     console.log("Open story:", story);
   };

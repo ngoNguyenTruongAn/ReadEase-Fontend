@@ -31,10 +31,18 @@ const validatePassword = (value) => {
 };
 
 const pickToken = (data) =>
-  data?.token ??
+  data?.access_token ??
   data?.accessToken ??
-  data?.data?.token ??
-  data?.data?.accessToken;
+  data?.token ??
+  data?.data?.access_token ??
+  data?.data?.accessToken ??
+  data?.data?.token;
+
+const pickRefreshToken = (data) =>
+  data?.refresh_token ??
+  data?.refreshToken ??
+  data?.data?.refresh_token ??
+  data?.data?.refreshToken;
 
 const pickErrorMessage = (err) => {
   const body = err?.response?.data;
@@ -97,8 +105,14 @@ const LoginPage = () => {
     try {
       const data = await AuthAPI.loginAPI(email.trim(), password);
       const token = pickToken(data);
-      if (token) localStorage.setItem("token", token);
-      navigate("/children");
+      const refreshToken = pickRefreshToken(data);
+      if (token) {
+        localStorage.setItem("access_token", token);
+      }
+      if (refreshToken) {
+        localStorage.setItem("refresh_token", refreshToken);
+      }
+      navigate("/children/profile");
     } catch (err) {
       setFormError(pickErrorMessage(err));
     } finally {
@@ -115,9 +129,11 @@ const LoginPage = () => {
 
   return (
     <div className="form-wrapper login-page">
-      <h1 className="title">ReadEase chào mừng bạn!</h1>
+      <h1 className="title">
+        <span style={{ color: "#FBBF24" }}>ReadEase</span> chào mừng bạn!
+      </h1>
 
-      <p className="subtitle">
+      <p className="subtitle subtitle--bold">
         Nơi việc học tập diễn ra theo tốc độ của con bạn.
       </p>
 
@@ -179,12 +195,17 @@ const LoginPage = () => {
           <a href="#forgot">Quên mật khẩu?</a>
         </div>
 
-        <button type="submit" className="btn-login" disabled={loading}>
+        <button
+          type="submit"
+          className="btn-login"
+          disabled={loading}
+          style={{ background: "#FBBF24" }}
+        >
           {loading ? "Đang đăng nhập..." : "Đăng nhập"}
         </button>
       </form>
 
-      <p className="signup-link">
+      <p className="signup-link" style={{ fontWeight: "bold" }}>
         Bạn chưa có tài khoản? <Link to="/register">Đăng ký</Link>
       </p>
     </div>
