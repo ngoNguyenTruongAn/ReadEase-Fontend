@@ -8,6 +8,8 @@ import ChildrenLayout from "./components/Web/Children/ChildrenLayout";
 import LibararyPage from "./components/Web/Children/Library/LibararyPage";
 import StorePage from "./components/Web/Children/Store/StorePage";
 import ProfileLayout from "./components/Web/Profile/ProfileLayout";
+import CalibrationStartPage from "./components/Web/Children/CalibrationStart/CalibrationStartPage";
+import ReadingPage from "./components/Web/Children/Reading/ReadingPage";
 // import HomePage from "./components/Web/Children/ChildrenLayout";
 
 function App() {
@@ -28,6 +30,15 @@ function App() {
         <Route path="/children/library" element={<LibararyPage />} />
         <Route path="/children/store" element={<StorePage />} />
       </Route>
+
+      {/* standalone calibration */}
+      <Route
+        path="/children/calibration/start"
+        element={<CalibrationStartPage />}
+      />
+
+      {/* standalone reading */}
+      <Route path="/children/reading" element={<ReadingPage />} />
     </Routes>
   );
 }

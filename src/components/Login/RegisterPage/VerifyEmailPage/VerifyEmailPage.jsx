@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AuthAPI from "../../../../service/Auth/AuthAPI";
 import "./VerifyEmailPage.scss";
@@ -10,11 +10,26 @@ const VerifyEmailPage = () => {
 
   const [digits, setDigits] = useState(Array(codeLength).fill(""));
   const [loading, setLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resendMessage, setResendMessage] = useState("");
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setInterval(() => {
+      setResendCooldown((s) => (s <= 1 ? 0 : s - 1));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [resendCooldown]);
 
   // Lấy thông tin từ localStorage đã lưu lúc Register
   const email = useMemo(() => localStorage.getItem("registerEmail") || "", []);
   const registerRole = useMemo(
     () => localStorage.getItem("registerRole") || "",
+    [],
+  );
+  const registerDisplayName = useMemo(
+    () => localStorage.getItem("registerUserName") || "",
     [],
   );
 
@@ -61,6 +76,7 @@ const VerifyEmailPage = () => {
 
       // Gọi API xác thực
       await AuthAPI.verifyOTPAPI(email, code);
+      sessionStorage.removeItem("registerPendingPassword");
 
       // --- LOGIC ĐIỀU HƯỚNG ---
       // Nếu role ban đầu chọn là child (ROLE_READER) -> Vào SelectRolePage
@@ -81,6 +97,44 @@ const VerifyEmailPage = () => {
       window.alert(Array.isArray(msg) ? msg.join(", ") : msg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const pickResendError = (err) => {
+    if (typeof err?.message === "string" && err.message) return err.message;
+    const body = err?.response?.data;
+    const apiErr = body?.error;
+    return (
+      (Array.isArray(apiErr?.details) && apiErr.details[0]) ||
+      (typeof apiErr?.message === "string" && apiErr.message) ||
+      (typeof body?.message === "string" && body.message) ||
+      (Array.isArray(body?.message) && body.message.join(", ")) ||
+      "Không gửi lại được mã. Vui lòng thử sau."
+    );
+  };
+
+  const handleResend = async () => {
+    const trimmed = email.trim();
+    if (!trimmed || resendLoading || resendCooldown > 0) return;
+    const password = sessionStorage.getItem("registerPendingPassword") || "";
+    const displayName = registerDisplayName.trim();
+    const role = registerRole;
+    if (!password || !displayName || !role) {
+      window.alert(
+        "Không thể gửi lại mã trong phiên này. Vui lòng quay lại trang đăng ký và đăng ký lại.",
+      );
+      return;
+    }
+    setResendMessage("");
+    setResendLoading(true);
+    try {
+      await AuthAPI.registerAPI(trimmed, password, displayName, role);
+      setResendMessage("Đã gửi lại mã. Kiểm tra hộp thư (và thư mục spam).");
+      setResendCooldown(60);
+    } catch (err) {
+      window.alert(pickResendError(err));
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -115,6 +169,31 @@ const VerifyEmailPage = () => {
           >
             {loading ? "Đang xử lý..." : "Xác thực ngay"}
           </button>
+
+          <div className="validate-resend">
+            <div className="validate-resend-row">
+              <span className="validate-resend-hint">Chưa nhận được mã?</span>
+              <button
+                type="button"
+                className="validate-resend-btn"
+                disabled={
+                  !email.trim() || resendLoading || resendCooldown > 0
+                }
+                onClick={handleResend}
+              >
+                {resendLoading
+                  ? "Đang gửi..."
+                  : resendCooldown > 0
+                    ? `Gửi lại sau (${resendCooldown}s)`
+                    : "Gửi lại mã"}
+              </button>
+            </div>
+            {resendMessage ? (
+              <p className="validate-resend-success" role="status">
+                {resendMessage}
+              </p>
+            ) : null}
+          </div>
         </form>
       </div>
     </div>

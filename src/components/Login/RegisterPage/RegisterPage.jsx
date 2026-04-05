@@ -37,6 +37,8 @@ const RegisterPage = () => {
       localStorage.setItem("registerEmail", email.trim());
       localStorage.setItem("registerUserName", displayName.trim());
       localStorage.setItem("registerRole", role);
+      // Dùng khi gửi lại mã (gọi lại đăng ký); xóa sau khi xác thực email xong
+      sessionStorage.setItem("registerPendingPassword", password);
       navigate("/validate");
     } catch (error) {
       const body = error?.response?.data;
