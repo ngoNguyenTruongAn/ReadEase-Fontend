@@ -1,44 +1,23 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
+import instance from "../../../../app/instance";
 import ContenAPI from "../../../../service/Contents/ContenAPI";
 import UsersAPI from "../../../../service/Users/UsersAPI";
 import ReadingAssistControls from "./components/ReadingAssistControls";
 import ReadingBookView from "./components/ReadingBookView";
 import ReadingPagination from "./components/ReadingPagination";
 import ReadingScorePanel from "./components/ReadingScorePanel";
+import useReadingDualInterventionSession from "./dualIntervention/hooks/useReadingDualInterventionSession";
+import { extractHybridVietnameseWordEntries } from "./dualIntervention/tokenization/hybridVietnameseSegmentation";
 import useHoverSpeech from "./hooks/useHoverSpeech";
 import {
+  extractStoryId,
   getSelectedStory,
   normalizeStoryPayload,
   pickStoryFromCollection,
   STORY_FALLBACK,
 } from "./readingUtils";
 import "./ReadingPage.scss";
-
-/*
- * UI TEST DATA (TEMP)
- * -----------------------------------------------------------------
- * Muc dich: Hien thi Reading Page doc lap de test UI/UX khi chua co
- * flow library -> game -> reading o local.
- *
- * Khi bat dau tich hop backend/flow that, dat USE_UI_MOCK_READING = false.
- */
-const USE_UI_MOCK_READING = true;
-
-/*
- * UI TEST DATA (TEMP) - Lorem Ipsum sample for page navigation testing.
- */
-const UI_MOCK_STORY = {
-  title: "Lorem Ipsum Story Demo",
-  pages: [
-    "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Quisque mollis, nibh sit amet tempor aliquet, arcu massa pellentesque orci, sed placerat nunc dui nec nisl. Suspendisse potenti. Curabitur ac mauris at erat tempus pulvinar.",
-    "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer tristique luctus elit, sed tincidunt elit condimentum eget. Proin et est nulla. Vivamus at lectus eu sapien ultrices posuere nec non sem.",
-    "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec id accumsan tortor. In vel urna in nulla porttitor rutrum. Nunc ullamcorper, turpis non aliquet lacinia, velit ipsum pellentesque lacus, ut viverra lacus tortor id mauris.",
-    "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam posuere fringilla enim, sed rutrum purus. Ut in pulvinar arcu. Sed sagittis, sapien quis malesuada pharetra, magna arcu malesuada lectus, eget interdum dolor risus eget ipsum.",
-    "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque id fermentum justo. Nulla facilisi. Aenean rhoncus vulputate justo, vel porttitor lorem consequat ut. Donec faucibus consectetur nibh ac tincidunt.",
-    "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam varius, lectus id fermentum dapibus, erat lacus posuere tortor, non posuere lectus lectus vel metus. Cras eu mi sapien. In feugiat iaculis mi, a efficitur nibh.",
-  ],
-};
 
 const ReadingPage = () => {
   const location = useLocation();
@@ -48,9 +27,7 @@ const ReadingPage = () => {
   );
 
   const [isLoading, setIsLoading] = useState(true);
-  const [story, setStory] = useState(
-    USE_UI_MOCK_READING ? UI_MOCK_STORY : STORY_FALLBACK,
-  );
+  const [story, setStory] = useState(STORY_FALLBACK);
   const [currentPage, setCurrentPage] = useState(0);
   const [isBionicEnabled, setIsBionicEnabled] = useState(false);
   const [isHoverSpeechEnabled, setIsHoverSpeechEnabled] = useState(false);
@@ -60,6 +37,7 @@ const ReadingPage = () => {
   const {
     handleHoverStart: handleHoverSpeechStart,
     handleHoverEnd: handleHoverSpeechEnd,
+    primeFromGesture: primeHoverSpeech,
     stop: stopHoverSpeech,
   } = useHoverSpeech({
     enabled: isHoverSpeechEnabled,
@@ -69,18 +47,33 @@ const ReadingPage = () => {
   useEffect(() => {
     let isMounted = true;
 
-    if (USE_UI_MOCK_READING) {
-      setStory(UI_MOCK_STORY);
-      setScore(120);
-      setIsLoading(false);
+    const toStoryCollection = (payload) => {
+      if (Array.isArray(payload)) return payload;
+      if (Array.isArray(payload?.stories)) return payload.stories;
+      if (Array.isArray(payload?.items)) return payload.items;
+      if (Array.isArray(payload?.data)) return payload.data;
+      return [];
+    };
 
-      return () => {
-        isMounted = false;
-        stopHoverSpeech();
-      };
-    }
+    const fetchStoryDetailById = async (contentId) => {
+      if (contentId === null || contentId === undefined || contentId === "") {
+        return null;
+      }
+
+      try {
+        return await ContenAPI.getReadingStoryDetail(contentId);
+      } catch {
+        return null;
+      }
+    };
 
     const fetchReadingData = async () => {
+      if (selectedStory) {
+        setStory(normalizeStoryPayload(null, selectedStory));
+      } else {
+        setStory(STORY_FALLBACK);
+      }
+
       setIsLoading(true);
 
       try {
@@ -91,15 +84,30 @@ const ReadingPage = () => {
 
         if (!isMounted) return;
 
+        let pickedStory = null;
         if (storiesResponse.status === "fulfilled") {
-          const payload = storiesResponse.value;
-          const stories = Array.isArray(payload)
-            ? payload
-            : payload?.data ?? payload?.stories ?? [];
-          const pickedStory = pickStoryFromCollection(stories, selectedStory);
-          if (pickedStory) {
-            setStory(normalizeStoryPayload(pickedStory, selectedStory));
-          }
+          const stories = toStoryCollection(storiesResponse.value);
+          pickedStory = pickStoryFromCollection(stories, selectedStory);
+        }
+
+        const detailCandidateIds = [
+          extractStoryId(selectedStory),
+          extractStoryId(pickedStory),
+        ].filter((id, index, ids) => id !== null && id !== undefined && ids.indexOf(id) === index);
+
+        let detailStory = null;
+        for (const detailId of detailCandidateIds) {
+          detailStory = await fetchStoryDetailById(detailId);
+          if (detailStory) break;
+        }
+
+        if (!isMounted) return;
+
+        const normalizedStory = normalizeStoryPayload(detailStory || pickedStory, selectedStory);
+        setStory(normalizedStory);
+
+        if (!detailStory && !pickedStory && !selectedStory) {
+          setStory(STORY_FALLBACK);
         }
 
         if (profileResponse.status === "fulfilled") {
@@ -135,7 +143,40 @@ const ReadingPage = () => {
 
   const totalPages = story.pages.length;
   const pageText = story.pages[currentPage] ?? "";
-  const pageHoverUnits = story?.hoverSpeechUnits?.[currentPage] ?? null;
+  const pageSegmentedText = story?.segmentedPages?.[currentPage] ?? pageText;
+  const pageWordEntries = useMemo(
+    () => extractHybridVietnameseWordEntries(pageSegmentedText),
+    [pageSegmentedText],
+  );
+
+  const resolveTooltipByWordIndex = useCallback(
+    (wordIndex) => {
+      if (!Number.isInteger(wordIndex) || wordIndex < 0) return null;
+      const wordEntry = pageWordEntries[wordIndex];
+      if (!wordEntry) return null;
+
+      return {
+        original: wordEntry.value,
+        simplified: wordEntry.value,
+        word: wordEntry.value,
+      };
+    },
+    [pageWordEntries],
+  );
+
+  const {
+    visualFlags,
+    wordIntervention,
+    activeTooltip,
+    handleStoryPointerMove,
+    handleTooltipRendered,
+  } = useReadingDualInterventionSession({
+    enabled: !isLoading && Boolean(pageText),
+    contentId:
+      story?.contentId ?? selectedStory?.id ?? selectedStory?._id ?? selectedStory?.storyId,
+    apiBaseUrl: instance?.defaults?.baseURL,
+    resolveTooltipByWordIndex,
+  });
 
   return (
     <div className="reading-page-shell">
@@ -151,16 +192,24 @@ const ReadingPage = () => {
             isBionicEnabled={isBionicEnabled}
             isHoverSpeechEnabled={isHoverSpeechEnabled}
             onToggleBionic={() => setIsBionicEnabled((prev) => !prev)}
-            onToggleHoverSpeech={() => setIsHoverSpeechEnabled((prev) => !prev)}
+            onToggleHoverSpeech={() => {
+              primeHoverSpeech();
+              setIsHoverSpeechEnabled((prev) => !prev);
+            }}
           />
 
           <ReadingBookView
             pageText={pageText}
+            pageSegmentedText={pageSegmentedText}
             useBionic={isBionicEnabled}
             isHoverSpeechEnabled={isHoverSpeechEnabled}
-            backendHoverUnits={pageHoverUnits}
+            visualFlags={visualFlags}
+            wordIntervention={wordIntervention}
+            activeTooltip={activeTooltip}
             onWordHoverStart={handleHoverSpeechStart}
             onWordHoverEnd={handleHoverSpeechEnd}
+            onStoryPointerMove={handleStoryPointerMove}
+            onTooltipRendered={handleTooltipRendered}
           />
 
           <ReadingScorePanel avatarUrl={avatarUrl} score={score} />

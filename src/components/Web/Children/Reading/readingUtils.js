@@ -93,7 +93,26 @@ const normalizePageItem = (item) => {
   );
 };
 
-const extractStoryId = (story) => story?.id ?? story?._id ?? story?.storyId ?? null;
+const resolveStoryBody = (story, selectedStory) =>
+  story?.body ??
+  story?.content ??
+  story?.story ??
+  selectedStory?.body ??
+  selectedStory?.content ??
+  selectedStory?.description ??
+  "";
+
+const resolveStorySegmentedBody = (story, selectedStory) =>
+  story?.body_segmented ??
+  story?.bodySegmented ??
+  story?.segmented_body ??
+  story?.segmentedBody ??
+  selectedStory?.body_segmented ??
+  selectedStory?.bodySegmented ??
+  null;
+
+export const extractStoryId = (story) =>
+  story?.id ?? story?._id ?? story?.storyId ?? story?.contentId ?? null;
 
 export const pickStoryFromCollection = (stories, selectedStory) => {
   if (!Array.isArray(stories) || stories.length === 0) return null;
@@ -121,25 +140,50 @@ export const normalizeStoryPayload = (story, selectedStory) => {
     toStringSafe(story?.title) ||
     toStringSafe(selectedStory?.title) ||
     "Truyện đang mở";
+  const contentId = extractStoryId(story) ?? extractStoryId(selectedStory);
 
-  const content = story?.content ?? story?.story ?? story?.body ?? null;
+  const content = resolveStoryBody(story, selectedStory);
+  const segmentedContent = resolveStorySegmentedBody(story, selectedStory);
 
   if (Array.isArray(content)) {
     const pages = content.map(normalizePageItem).filter(Boolean);
     if (pages.length > 0) {
-      return { title, pages };
+      const segmentedPages = Array.isArray(segmentedContent)
+        ? segmentedContent.map(normalizePageItem).filter(Boolean)
+        : pages;
+
+      return {
+        title,
+        contentId,
+        pages,
+        segmentedPages,
+      };
     }
   }
 
+  const fallbackRawBody = toStringSafe(content);
+  const fallbackSegmentedBody = toStringSafe(segmentedContent) || fallbackRawBody;
+
+  const pages = splitIntoPages(fallbackRawBody || selectedStory?.description);
+  const segmentedPages = splitIntoPages(fallbackSegmentedBody || selectedStory?.description);
+
   return {
     title,
-    pages: splitIntoPages(content || selectedStory?.content || selectedStory?.description),
+    contentId,
+    pages,
+    segmentedPages,
   };
 };
 
 export const STORY_FALLBACK = {
   title: "Cây khế trả vàng",
+  contentId: null,
   pages: [
+    "Năm ấy, cây khế trong vườn nhà người em bỗng sai quả lạ thường, cành nào cũng trĩu quả ngọt, vàng ruộm. Người em nhìn cây khế mà lòng khấp khởi mừng thầm tính chuyện bán khế lấy tiền dong gạo.",
+    "Bỗng một hôm, có con chim lớn bay tới ăn khế. Người em buồn rầu khóc kể gia cảnh khó khăn. Chim bèn nói: Ăn một quả trả cục vàng, may túi ba gang mang đi mà đựng.",
+    "Người em làm theo lời chim dặn, được chim chở ra đảo vàng lấy đủ ba gang túi rồi trở về. Từ đó, gia đình người em no đủ và sống hiền lành, chăm chỉ như trước.",
+  ],
+  segmentedPages: [
     "Năm ấy, cây khế trong vườn nhà người em bỗng sai quả lạ thường, cành nào cũng trĩu quả ngọt, vàng ruộm. Người em nhìn cây khế mà lòng khấp khởi mừng thầm tính chuyện bán khế lấy tiền dong gạo.",
     "Bỗng một hôm, có con chim lớn bay tới ăn khế. Người em buồn rầu khóc kể gia cảnh khó khăn. Chim bèn nói: Ăn một quả trả cục vàng, may túi ba gang mang đi mà đựng.",
     "Người em làm theo lời chim dặn, được chim chở ra đảo vàng lấy đủ ba gang túi rồi trở về. Từ đó, gia đình người em no đủ và sống hiền lành, chăm chỉ như trước.",
