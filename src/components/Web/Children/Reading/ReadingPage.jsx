@@ -91,8 +91,8 @@ const ReadingPage = () => {
         }
 
         const detailCandidateIds = [
-          extractStoryId(selectedStory),
           extractStoryId(pickedStory),
+          extractStoryId(selectedStory),
         ].filter((id, index, ids) => id !== null && id !== undefined && ids.indexOf(id) === index);
 
         let detailStory = null;

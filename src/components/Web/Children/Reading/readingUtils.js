@@ -112,7 +112,15 @@ const resolveStorySegmentedBody = (story, selectedStory) =>
   null;
 
 export const extractStoryId = (story) =>
-  story?.id ?? story?._id ?? story?.storyId ?? story?.contentId ?? null;
+  story?.id ??
+  story?._id ??
+  story?.storyId ??
+  story?.story_id ??
+  story?.contentId ??
+  story?.content_id ??
+  story?.contentID ??
+  story?.uuid ??
+  null;
 
 export const pickStoryFromCollection = (stories, selectedStory) => {
   if (!Array.isArray(stories) || stories.length === 0) return null;
