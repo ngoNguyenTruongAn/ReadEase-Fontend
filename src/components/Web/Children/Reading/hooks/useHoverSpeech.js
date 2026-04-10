@@ -1,16 +1,31 @@
 import { useCallback, useEffect, useRef } from "react";
-import {
-  HOVER_TTS_CONFIG,
-  HOVER_TTS_DEFAULT_LANGUAGE,
-  normalizeGoogleTranslateLanguage,
-} from "../tts/config";
-import { createHoverTtsAudioEngine } from "../tts/core/createHoverTtsAudioEngine";
-import { createGoogleTranslateTtsProvider } from "../tts/providers/googleTranslateTtsProvider";
 
-const VIETNAMESE_NATIVE_VOICE_HINTS = [
-  /hoai\s*my/i,
+const DEFAULT_LANGUAGE = "vi-VN";
+
+const toPositiveInteger = (value, fallback) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.round(parsed);
+};
+
+const toPositiveNumber = (value, fallback) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+};
+
+const HOVER_STOP_DELAY_MS = toPositiveInteger(import.meta.env?.VITE_HOVER_TTS_STOP_DELAY_MS, 95);
+const HOVER_PLAYBACK_RATE = toPositiveNumber(import.meta.env?.VITE_HOVER_TTS_PLAYBACK_RATE, 0.95);
+const PREFERRED_VOICE_NAME_HINT = String(
+  import.meta.env?.VITE_HOVER_NATIVE_VOICE_NAME_HINT || "Microsoft An",
+)
+  .trim()
+  .toLowerCase();
+
+const VIETNAMESE_VOICE_NAME_HINTS = [
+  /microsoft\s+an/i,
   /microsoft\s+hoaimy/i,
-  /google\s+(ti[eế]ng\s*)?vi[eệ]t/i,
+  /hoai\s*my/i,
   /vietnam/i,
   /ti[eế]ng\s*vi[eệ]t/i,
   /vi[-_ ]?vn/i,
@@ -18,21 +33,27 @@ const VIETNAMESE_NATIVE_VOICE_HINTS = [
 
 const normalizeLang = (value) => String(value || "").trim().toLowerCase();
 
-const isVietnameseNativeVoice = (voice) => {
+const normalizeHoverSpeechText = (value) =>
+  String(value ?? "")
+    .replace(/\s+/g, " ")
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")
+    .trim();
+
+const isVietnameseVoice = (voice) => {
   const lang = normalizeLang(voice?.lang);
   if (lang === "vi" || lang === "vi-vn" || lang.startsWith("vi-")) return true;
 
   const name = String(voice?.name || "");
-  return VIETNAMESE_NATIVE_VOICE_HINTS.some((pattern) => pattern.test(name));
+  return VIETNAMESE_VOICE_NAME_HINTS.some((pattern) => pattern.test(name));
 };
 
-const scoreVietnameseNativeVoice = ({ voice, language, preferredNameHint }) => {
+const scoreVietnameseVoice = ({ voice, language }) => {
   if (!voice) return Number.NEGATIVE_INFINITY;
 
   const targetLang = normalizeLang(language);
   const lang = normalizeLang(voice.lang);
   const name = String(voice.name || "");
-  const normalizedPreferredHint = String(preferredNameHint || "").trim().toLowerCase();
+  const normalizedName = name.toLowerCase();
   let score = 0;
 
   if (lang === targetLang) score += 280;
@@ -41,11 +62,11 @@ const scoreVietnameseNativeVoice = ({ voice, language, preferredNameHint }) => {
   if (voice.localService) score += 60;
   if (voice.default) score += 20;
 
-  if (VIETNAMESE_NATIVE_VOICE_HINTS.some((pattern) => pattern.test(name))) {
+  if (VIETNAMESE_VOICE_NAME_HINTS.some((pattern) => pattern.test(name))) {
     score += 120;
   }
 
-  if (normalizedPreferredHint && name.toLowerCase().includes(normalizedPreferredHint)) {
+  if (PREFERRED_VOICE_NAME_HINT && normalizedName.includes(PREFERRED_VOICE_NAME_HINT)) {
     score += 260;
   }
 
@@ -56,207 +77,157 @@ const scoreVietnameseNativeVoice = ({ voice, language, preferredNameHint }) => {
   return score;
 };
 
-const pickPreferredVietnameseNativeVoice = ({ voices, language, preferredNameHint }) => {
+const pickPreferredVietnameseVoice = ({ voices, language }) => {
   if (!Array.isArray(voices) || voices.length === 0) return null;
 
-  const candidates = voices.filter((voice) => isVietnameseNativeVoice(voice));
+  const candidates = voices.filter((voice) => isVietnameseVoice(voice));
   if (candidates.length === 0) return null;
 
   return candidates.reduce((best, current) => {
     if (!best) return current;
 
-    return scoreVietnameseNativeVoice({
+    return scoreVietnameseVoice({
       voice: current,
       language,
-      preferredNameHint,
     }) >
-      scoreVietnameseNativeVoice({
+      scoreVietnameseVoice({
         voice: best,
         language,
-        preferredNameHint,
       })
       ? current
       : best;
   }, null);
 };
 
-const useHoverSpeech = ({ enabled, language = HOVER_TTS_DEFAULT_LANGUAGE }) => {
-  const engineRef = useRef(null);
+const useHoverSpeech = ({ enabled, language = DEFAULT_LANGUAGE }) => {
   const isEnabledRef = useRef(Boolean(enabled));
-  const preferredNativeVoiceRef = useRef(null);
-  const hasLoggedAutoplayWarningRef = useRef(false);
-  const hasLoggedUnsupportedSourceRef = useRef(false);
-  const hasLoggedMissingVietnameseVoiceRef = useRef(false);
-  const lastNativeFallbackTextRef = useRef("");
-  const lastNativeFallbackAtRef = useRef(0);
+  const preferredVoiceRef = useRef(null);
+  const stopTimerRef = useRef(null);
+  const activeTextRef = useRef("");
+  const hasLoggedNoVietnameseVoiceRef = useRef(false);
 
-  const syncPreferredNativeVoice = useCallback(() => {
+  const clearStopTimer = useCallback(() => {
+    if (!stopTimerRef.current) return;
+
+    window.clearTimeout(stopTimerRef.current);
+    stopTimerRef.current = null;
+  }, []);
+
+  const syncPreferredVoice = useCallback(() => {
     if (!("speechSynthesis" in window)) return;
 
     const synth = window.speechSynthesis;
     const voices = synth.getVoices?.() || [];
-    preferredNativeVoiceRef.current = pickPreferredVietnameseNativeVoice({
+
+    preferredVoiceRef.current = pickPreferredVietnameseVoice({
       voices,
       language,
-      preferredNameHint: HOVER_TTS_CONFIG.native?.preferredVoiceNameHint,
     });
 
     if (
-      normalizeGoogleTranslateLanguage(language) === "vi" &&
+      normalizeLang(language).startsWith("vi") &&
       voices.length > 0 &&
-      !preferredNativeVoiceRef.current &&
-      !hasLoggedMissingVietnameseVoiceRef.current
+      !preferredVoiceRef.current &&
+      !hasLoggedNoVietnameseVoiceRef.current
     ) {
-      hasLoggedMissingVietnameseVoiceRef.current = true;
+      hasLoggedNoVietnameseVoiceRef.current = true;
       console.warn(
-        "[HoverTTS] No Vietnamese native voice found in this browser. Install a Vietnamese OS/browser voice for local fallback.",
+        "[HoverSpeech] No Vietnamese voice found. Install Vietnamese voice pack (e.g. Microsoft An) in Windows settings.",
       );
     }
 
-    if (preferredNativeVoiceRef.current) {
-      hasLoggedMissingVietnameseVoiceRef.current = false;
+    if (preferredVoiceRef.current) {
+      hasLoggedNoVietnameseVoiceRef.current = false;
     }
   }, [language]);
 
-  const speakWithNativeFallback = useCallback(
+  const speakText = useCallback(
     (rawText) => {
-      if (!("speechSynthesis" in window)) {
-        return false;
-      }
+      if (!("speechSynthesis" in window)) return false;
 
-      const text = String(rawText ?? "").trim();
+      const text = normalizeHoverSpeechText(rawText);
       if (!text) return false;
-      const now = Date.now();
-      if (text === lastNativeFallbackTextRef.current && now - lastNativeFallbackAtRef.current < 700) {
+
+      const synth = window.speechSynthesis;
+      if (text === activeTextRef.current && synth.speaking) {
         return true;
       }
 
-      const synth = window.speechSynthesis;
-      syncPreferredNativeVoice();
+      clearStopTimer();
+      syncPreferredVoice();
 
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = normalizeGoogleTranslateLanguage(language) === "vi" ? "vi-VN" : language;
-      utterance.rate = HOVER_TTS_CONFIG.playbackRate;
+      utterance.lang = language;
+      utterance.rate = HOVER_PLAYBACK_RATE;
+      utterance.pitch = 1;
 
-      const preferredNativeVoice = preferredNativeVoiceRef.current;
-      if (preferredNativeVoice) {
-        utterance.voice = preferredNativeVoice;
-        utterance.lang = preferredNativeVoice.lang || utterance.lang;
+      const preferredVoice = preferredVoiceRef.current;
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+        utterance.lang = preferredVoice.lang || utterance.lang;
       }
+
+      utterance.onend = () => {
+        if (activeTextRef.current === text) {
+          activeTextRef.current = "";
+        }
+      };
+
+      utterance.onerror = () => {
+        if (activeTextRef.current === text) {
+          activeTextRef.current = "";
+        }
+      };
+
+      activeTextRef.current = text;
 
       try {
         synth.cancel();
         synth.speak(utterance);
-        lastNativeFallbackTextRef.current = text;
-        lastNativeFallbackAtRef.current = now;
         return true;
       } catch {
+        activeTextRef.current = "";
         return false;
       }
     },
-    [language, syncPreferredNativeVoice],
+    [clearStopTimer, language, syncPreferredVoice],
   );
 
-  const handlePlaybackError = useCallback(({ error, providerId, url, attemptedUrls, sourceText }) => {
-    const errorName = String(error?.name || "UnknownError");
-    const errorMessage = String(error?.message || "");
-
-    if (errorName === "AbortError") {
-      return;
-    }
-
-    if (errorName === "NotAllowedError") {
-      if (!hasLoggedAutoplayWarningRef.current) {
-        hasLoggedAutoplayWarningRef.current = true;
-        console.warn(
-          `[HoverTTS] Browser blocked audio autoplay (${providerId}). Click the Hover to Speech button once, then hover again.`,
-        );
-      }
-      return;
-    }
-
-    if (errorName === "NotSupportedError") {
-      if (!hasLoggedUnsupportedSourceRef.current) {
-        hasLoggedUnsupportedSourceRef.current = true;
-        const attempted = Array.isArray(attemptedUrls) ? attemptedUrls.join(" | ") : "n/a";
-        console.warn(
-          `[HoverTTS] Audio source unsupported (${providerId}). Last URL: ${url || "n/a"}. Attempts: ${attempted}`,
-        );
-      }
-
-      const didFallbackToNative = speakWithNativeFallback(sourceText);
-      if (!didFallbackToNative) {
-        console.warn("[HoverTTS] Native fallback is unavailable in this browser context.");
-      }
-      return;
-    }
-
-    console.warn(`[HoverTTS] Playback error (${providerId}): ${errorName} ${errorMessage}`);
-  }, [speakWithNativeFallback]);
-
-  const createEngine = useCallback(() => {
-    const provider = createGoogleTranslateTtsProvider({
-      baseUrl: HOVER_TTS_CONFIG.googleTranslate.baseUrl,
-      client: HOVER_TTS_CONFIG.googleTranslate.client,
-      language: normalizeGoogleTranslateLanguage(language),
-      maxCharsPerRequest: HOVER_TTS_CONFIG.googleTranslate.maxCharsPerRequest,
-    });
-
-    return createHoverTtsAudioEngine({
-      provider,
-      stopDelayMs: HOVER_TTS_CONFIG.stopDelayMs,
-      playbackRate: HOVER_TTS_CONFIG.playbackRate,
-      onPlaybackError: handlePlaybackError,
-    });
-  }, [handlePlaybackError, language]);
-
-  const ensureEngine = useCallback(() => {
-    if (!engineRef.current) {
-      engineRef.current = createEngine();
-    }
-
-    return engineRef.current;
-  }, [createEngine]);
-
   const stop = useCallback(() => {
-    engineRef.current?.stop();
-
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-    }
-
-    lastNativeFallbackTextRef.current = "";
-    lastNativeFallbackAtRef.current = 0;
-  }, []);
+    clearStopTimer();
+    activeTextRef.current = "";
+    window.speechSynthesis?.cancel();
+  }, [clearStopTimer]);
 
   const primeFromGesture = useCallback(() => {
-    ensureEngine()
-      .primeFromUserGesture()
-      .then(() => {
-        hasLoggedAutoplayWarningRef.current = false;
-        hasLoggedUnsupportedSourceRef.current = false;
-        lastNativeFallbackTextRef.current = "";
-        lastNativeFallbackAtRef.current = 0;
-      })
-      .catch(() => {
-        // no-op
-      });
-  }, [ensureEngine]);
+    clearStopTimer();
+    syncPreferredVoice();
+
+    try {
+      window.speechSynthesis?.resume?.();
+    } catch {
+      // no-op
+    }
+  }, [clearStopTimer, syncPreferredVoice]);
 
   const handleHoverStart = useCallback(
     (rawText) => {
       if (!isEnabledRef.current) return;
 
-      ensureEngine().speak(rawText);
+      speakText(rawText);
     },
-    [ensureEngine],
+    [speakText],
   );
 
   const handleHoverEnd = useCallback(() => {
     if (!isEnabledRef.current) return;
 
-    engineRef.current?.scheduleStop();
-  }, []);
+    clearStopTimer();
+    stopTimerRef.current = window.setTimeout(() => {
+      activeTextRef.current = "";
+      window.speechSynthesis?.cancel();
+    }, HOVER_STOP_DELAY_MS);
+  }, [clearStopTimer]);
 
   useEffect(() => {
     isEnabledRef.current = Boolean(enabled);
@@ -266,17 +237,17 @@ const useHoverSpeech = ({ enabled, language = HOVER_TTS_DEFAULT_LANGUAGE }) => {
       return;
     }
 
-    ensureEngine();
-  }, [enabled, ensureEngine, stop]);
+    syncPreferredVoice();
+  }, [enabled, stop, syncPreferredVoice]);
 
   useEffect(() => {
     if (!("speechSynthesis" in window)) return undefined;
 
     const synth = window.speechSynthesis;
-    syncPreferredNativeVoice();
+    syncPreferredVoice();
 
     const handleVoicesChanged = () => {
-      syncPreferredNativeVoice();
+      syncPreferredVoice();
     };
 
     const previousVoicesChangedHandler = synth.onvoiceschanged;
@@ -295,24 +266,13 @@ const useHoverSpeech = ({ enabled, language = HOVER_TTS_DEFAULT_LANGUAGE }) => {
         synth.onvoiceschanged = previousVoicesChangedHandler || null;
       }
     };
-  }, [syncPreferredNativeVoice]);
-
-  useEffect(() => {
-    if (!engineRef.current) return;
-
-    // Recreate engine when language changes so provider URLs keep matching locale.
-    engineRef.current.dispose();
-    engineRef.current = createEngine();
-  }, [createEngine]);
+  }, [syncPreferredVoice]);
 
   useEffect(() => {
     return () => {
-      if (!engineRef.current) return;
-
-      engineRef.current.dispose();
-      engineRef.current = null;
+      stop();
     };
-  }, []);
+  }, [stop]);
 
   return {
     handleHoverStart,
