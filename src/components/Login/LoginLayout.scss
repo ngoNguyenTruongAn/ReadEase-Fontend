@@ -6,7 +6,11 @@
   // min-height: 100vh;
 
   // nền chia đôi giống design SaaS
-  background: linear-gradient(to right, rgba($bg-visual, 0.2) 50%, white 50%);
+  background: linear-gradient(
+    to right,
+    rgba($bg-children-side, 0.2) 50%,
+    white 50%
+  );
 }
 
 // ===== MAIN CONTAINER (LIMIT 1200px) =====

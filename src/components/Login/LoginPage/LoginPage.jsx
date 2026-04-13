@@ -7,7 +7,7 @@ import "./LoginPage.scss";
 const EMAIL_REGEX =
   /^[a-zA-Z0-9](?:[a-zA-Z0-9._%+-]*[a-zA-Z0-9])?@[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,}$/;
 
-const MIN_PASSWORD_LEN = 6;
+const MIN_PASSWORD_LEN = 8;
 const MAX_PASSWORD_LEN = 128;
 const MAX_EMAIL_LEN = 254;
 
@@ -192,7 +192,7 @@ const LoginPage = () => {
         </div>
 
         <div className="forgot-password">
-          <a href="#forgot">Quên mật khẩu?</a>
+          <Link to="/forgot-password">Quên mật khẩu?</Link>
         </div>
 
         <button
