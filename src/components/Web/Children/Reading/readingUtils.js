@@ -1,4 +1,8 @@
 const STORY_STORAGE_KEY = "children:selected-story";
+const STORY_EMPTY_PLACEHOLDER = "Nội dung truyện sẽ sớm được cập nhật.";
+
+export const STORY_CONTENT_UNAVAILABLE_MESSAGE =
+  "Nội dung truyện hiện không khả dụng. Vui lòng thử lại sau.";
 
 export const saveSelectedStory = (story) => {
   if (!story) return;
@@ -25,7 +29,7 @@ const toStringSafe = (value) => String(value ?? "").trim();
 const splitIntoPages = (rawText, maxCharsPerPage = 420) => {
   const normalized = toStringSafe(rawText).replace(/\r/g, "").trim();
   if (!normalized) {
-    return ["Nội dung truyện sẽ sớm được cập nhật."];
+    return [STORY_EMPTY_PLACEHOLDER];
   }
 
   const paragraphs = normalized
@@ -34,7 +38,7 @@ const splitIntoPages = (rawText, maxCharsPerPage = 420) => {
     .filter(Boolean);
 
   if (paragraphs.length === 0) {
-    return ["Nội dung truyện sẽ sớm được cập nhật."];
+    return [STORY_EMPTY_PLACEHOLDER];
   }
 
   const pages = [];
@@ -80,7 +84,7 @@ const splitIntoPages = (rawText, maxCharsPerPage = 420) => {
 
   if (currentPage) pages.push(currentPage);
 
-  return pages.length > 0 ? pages : ["Nội dung truyện sẽ sớm được cập nhật."];
+  return pages.length > 0 ? pages : [STORY_EMPTY_PLACEHOLDER];
 };
 
 const normalizePageItem = (item) => {
@@ -165,6 +169,7 @@ export const normalizeStoryPayload = (story, selectedStory) => {
         contentId,
         pages,
         segmentedPages,
+        isContentAvailable: true,
       };
     }
   }
@@ -180,8 +185,20 @@ export const normalizeStoryPayload = (story, selectedStory) => {
     contentId,
     pages,
     segmentedPages,
+    isContentAvailable: Boolean(fallbackRawBody || fallbackSegmentedBody),
   };
 };
+
+export const buildUnavailableStoryPayload = (story, selectedStory) => ({
+  title:
+    toStringSafe(story?.title) ||
+    toStringSafe(selectedStory?.title) ||
+    "Truyện đang mở",
+  contentId: extractStoryId(story) ?? extractStoryId(selectedStory),
+  pages: [""],
+  segmentedPages: [""],
+  isContentAvailable: false,
+});
 
 export const STORY_FALLBACK = {
   title: "Cây khế trả vàng",

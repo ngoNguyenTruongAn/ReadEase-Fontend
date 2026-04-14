@@ -54,6 +54,7 @@ const ReadingBookView = ({
   onWordHoverStart,
   onWordHoverEnd,
   onStoryPointerMove,
+  onStoryPointerLeave,
   onTooltipRendered,
 }) => {
   const wordElementRef = useRef(new Map());
@@ -219,6 +220,7 @@ const ReadingBookView = ({
     visualFlags?.isVisualActive ? "is-visual-adaptation-active" : "",
     visualFlags?.isLetterSpacingExpanded ? "visual-letter-spacing-expanded" : "",
     visualFlags?.isColorBandingEnabled ? "visual-color-banding" : "",
+    visualFlags?.isInvertedDeep ? "visual-inverted-deep" : "",
     visualFlags?.mode === VISUAL_MODES.DUAL_INTERVENTION ? "visual-dual-intervention" : "",
     visualFlags?.mode === VISUAL_MODES.VISUAL_ONLY ? "visual-visual-only" : "",
     visualFlags?.confidenceClassName || "",
@@ -235,6 +237,7 @@ const ReadingBookView = ({
       onPointerLeave={() => {
         lastHoveredWordIndexRef.current = null;
         onWordHoverEnd?.();
+        onStoryPointerLeave?.();
       }}
     >
       <p className="reading-book-text">{content}</p>
