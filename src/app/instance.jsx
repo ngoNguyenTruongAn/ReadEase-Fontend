@@ -23,12 +23,21 @@ const setRefreshToken = (token) => {
   localStorage.setItem("refresh_token", token);
 };
 
+const setTrackingToken = (token) => {
+  if (!token) return;
+  localStorage.setItem("tracking_token", token);
+};
+
 const clearAuth = () => {
   localStorage.removeItem("access_token");
   localStorage.removeItem("accessToken");
   localStorage.removeItem("token");
   localStorage.removeItem("refresh_token");
   localStorage.removeItem("refreshToken");
+  localStorage.removeItem("tracking_token");
+  localStorage.removeItem("trackingToken");
+  localStorage.removeItem("ws_token");
+  localStorage.removeItem("wsToken");
 };
 
 instance.interceptors.request.use((config) => {
@@ -85,9 +94,19 @@ instance.interceptors.response.use(
         data?.refreshToken ??
         data?.data?.refresh_token ??
         data?.data?.refreshToken;
+      const newTrackingToken =
+        data?.tracking_token ??
+        data?.trackingToken ??
+        data?.ws_token ??
+        data?.wsToken ??
+        data?.data?.tracking_token ??
+        data?.data?.trackingToken ??
+        data?.data?.ws_token ??
+        data?.data?.wsToken;
 
       if (newAccess) setAccessToken(newAccess);
       if (newRefresh) setRefreshToken(newRefresh);
+      if (newTrackingToken) setTrackingToken(newTrackingToken);
 
       original.headers = original.headers || {};
       if (newAccess) original.headers.Authorization = `Bearer ${newAccess}`;
