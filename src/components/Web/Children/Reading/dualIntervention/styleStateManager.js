@@ -39,6 +39,7 @@ export const INITIAL_VISUAL_FLAGS = {
   isVisualActive: false,
   isLetterSpacingExpanded: false,
   isColorBandingEnabled: false,
+  isInvertedDeep: false,
   confidence: null,
   confidenceClassName: "",
   state: ADAPTATION_STATES.FLUENT,
@@ -46,6 +47,8 @@ export const INITIAL_VISUAL_FLAGS = {
   letterSpacingEm: 0.055,
   transitionMs: 200,
   colorBandingStrength: 0.13,
+  invertedStrength: 0,
+  contrastBoost: 1,
 };
 
 export const INITIAL_WORD_INTERVENTION = {
@@ -62,6 +65,9 @@ const getDefaultTransitionByMode = (mode) =>
 
 const getDefaultColorBandingByMode = (mode) =>
   mode === VISUAL_MODES.DUAL_INTERVENTION ? 0.18 : 0.13;
+
+const getDefaultInvertedDeep = ({ state, mode }) =>
+  state === ADAPTATION_STATES.REGRESSION && mode === VISUAL_MODES.DUAL_INTERVENTION;
 
 export const createVisualFlagsFromAdaptation = ({
   state,
@@ -88,6 +94,24 @@ export const createVisualFlagsFromAdaptation = ({
   const explicitColorBandingToggle =
     typeof params?.colorBanding === "boolean" ? params.colorBanding : null;
 
+  const explicitInvertedDeep =
+    typeof params?.invertedDeep === "boolean"
+      ? params.invertedDeep
+      : typeof params?.deepInverted === "boolean"
+        ? params.deepInverted
+        : typeof params?.invertDeep === "boolean"
+          ? params.invertDeep
+          : null;
+
+  const rawInvertedStrength =
+    toFiniteNumberOrNull(params?.invertedStrength) ??
+    toFiniteNumberOrNull(params?.invertStrength) ??
+    toFiniteNumberOrNull(params?.invert);
+
+  const rawContrastBoost =
+    toFiniteNumberOrNull(params?.contrastBoost) ??
+    toFiniteNumberOrNull(params?.contrast);
+
   const letterSpacingEm = clamp(
     rawLetterSpacing ?? getDefaultLetterSpacingByMode(resolvedMode),
     0,
@@ -109,10 +133,19 @@ export const createVisualFlagsFromAdaptation = ({
       ? explicitColorBandingToggle
       : colorBandingStrength > 0;
 
+  const isInvertedDeep =
+    explicitInvertedDeep !== null
+      ? explicitInvertedDeep
+      : getDefaultInvertedDeep({ state: resolvedState, mode: resolvedMode });
+
+  const invertedStrength = clamp(rawInvertedStrength ?? (isInvertedDeep ? 0.88 : 0), 0, 1);
+  const contrastBoost = clamp(rawContrastBoost ?? (isInvertedDeep ? 1.18 : 1), 1, 1.8);
+
   return {
     isVisualActive: true,
     isLetterSpacingExpanded: letterSpacingEm > 0,
     isColorBandingEnabled,
+    isInvertedDeep,
     confidence: resolvedConfidence,
     confidenceClassName: createConfidenceClassName(resolvedConfidence),
     state: resolvedState,
@@ -120,6 +153,8 @@ export const createVisualFlagsFromAdaptation = ({
     letterSpacingEm,
     transitionMs,
     colorBandingStrength,
+    invertedStrength,
+    contrastBoost,
   };
 };
 
@@ -133,5 +168,7 @@ export const createVisualStyleVars = (visualFlags) => {
     "--reading-color-banding-soft": String(
       Math.max((visualFlags.colorBandingStrength ?? 0.13) * 0.36, 0.02),
     ),
+    "--reading-invert-strength": String(visualFlags.invertedStrength ?? 0),
+    "--reading-contrast-boost": String(visualFlags.contrastBoost ?? 1),
   };
 };

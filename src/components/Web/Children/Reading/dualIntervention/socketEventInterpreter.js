@@ -2,6 +2,15 @@ import { resolveAdaptationState } from "./styleStateManager";
 
 const toStringSafe = (value) => String(value ?? "").trim();
 
+const normalizeEventName = (value) =>
+  toStringSafe(value)
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/_/g, ":");
+
+const isEventIn = (eventName, candidates) =>
+  candidates.some((candidate) => eventName === normalizeEventName(candidate));
+
 const toIntegerOrNull = (value) => {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
@@ -153,20 +162,29 @@ export const createTooltipFromSocketPayload = ({
 };
 
 export const interpretTrackingSocketEvent = ({ message, currentWordIndex }) => {
-  if (!message?.event) {
+  if (!message) {
     return { type: "ignore" };
   }
 
-  const eventName = toStringSafe(message.event).toLowerCase();
+  const eventName = normalizeEventName(message.event || message.type || message.name);
+  if (!eventName) return { type: "ignore" };
+
   const payload = message?.data || {};
 
-  if (eventName === "intervention:reset") {
+  if (isEventIn(eventName, ["intervention:reset", "adaptation:reset", "session:reset"])) {
     return {
       type: "reset",
     };
   }
 
-  if (eventName === "adaptation:trigger") {
+  if (
+    isEventIn(eventName, [
+      "adaptation:trigger",
+      "adaptation:triggered",
+      "intervention:trigger",
+      "intervention:adaptation",
+    ])
+  ) {
     return {
       type: "adaptation",
       payload: {
@@ -180,7 +198,14 @@ export const interpretTrackingSocketEvent = ({ message, currentWordIndex }) => {
     };
   }
 
-  if (eventName === "tooltip:show") {
+  if (
+    isEventIn(eventName, [
+      "tooltip:show",
+      "tooltip:display",
+      "intervention:tooltip",
+      "semantic:tooltip",
+    ])
+  ) {
     if (toStringSafe(payload?.source).toLowerCase() === "frontend") {
       return { type: "ignore" };
     }

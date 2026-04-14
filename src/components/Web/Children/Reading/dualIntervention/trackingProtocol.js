@@ -3,9 +3,86 @@ export const DEFAULT_FLUSH_INTERVAL_MS = 100;
 export const DEFAULT_FLUENT_TIMEOUT_MS = 6000;
 export const DISTRACTION_HINT_DURATION_MS = 1600;
 
+const TRACKING_TOKEN_KEYS = ["tracking_token", "trackingToken", "ws_token", "wsToken"];
 const ACCESS_TOKEN_KEYS = ["access_token", "accessToken", "token"];
 
 const toStringSafe = (value) => String(value ?? "").trim();
+
+const decodeJwtPayload = (token) => {
+  const normalizedToken = toStringSafe(token);
+  const parts = normalizedToken.split(".");
+  if (parts.length < 2) return null;
+
+  const payloadBase64 = parts[1]
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
+  const paddedPayload = payloadBase64.padEnd(
+    payloadBase64.length + ((4 - (payloadBase64.length % 4)) % 4),
+    "=",
+  );
+
+  try {
+    if (typeof atob !== "function") {
+      return null;
+    }
+
+    const decoded = atob(paddedPayload);
+
+    const decodedUtf8 = decodeURIComponent(
+      decoded
+        .split("")
+        .map((character) => `%${character.charCodeAt(0).toString(16).padStart(2, "0")}`)
+        .join(""),
+    );
+
+    const parsed = JSON.parse(decodedUtf8);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+const resolveTokenByKeys = (keys) => {
+  if (typeof window === "undefined") return { token: "", sourceKey: "" };
+
+  for (const key of keys) {
+    const token = toStringSafe(window.localStorage.getItem(key));
+    if (token) {
+      return {
+        token,
+        sourceKey: key,
+      };
+    }
+  }
+
+  return { token: "", sourceKey: "" };
+};
+
+export const getTrackingAuthTokenContext = () => {
+  const trackingTokenCandidate = resolveTokenByKeys(TRACKING_TOKEN_KEYS);
+  const accessTokenCandidate = resolveTokenByKeys(ACCESS_TOKEN_KEYS);
+
+  const token = trackingTokenCandidate.token || accessTokenCandidate.token;
+  const sourceKey = trackingTokenCandidate.token
+    ? trackingTokenCandidate.sourceKey
+    : accessTokenCandidate.sourceKey;
+
+  const payload = token ? decodeJwtPayload(token) : null;
+  const hasRequiredClaims =
+    Boolean(payload) &&
+    Boolean(toStringSafe(payload?.user_id)) &&
+    Boolean(toStringSafe(payload?.session_id));
+
+  return {
+    token,
+    sourceKey,
+    payload,
+    hasRequiredClaims,
+  };
+};
+
+export const createTrackingSessionId = () =>
+  `reading-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
 const normalizeApiBaseForTracking = (value) =>
   toStringSafe(value)
@@ -34,14 +111,7 @@ const toWsProtocolUrl = (value) => {
 };
 
 export const getTrackingAuthToken = () => {
-  if (typeof window === "undefined") return "";
-
-  for (const key of ACCESS_TOKEN_KEYS) {
-    const token = toStringSafe(window.localStorage.getItem(key));
-    if (token) return token;
-  }
-
-  return "";
+  return getTrackingAuthTokenContext().token;
 };
 
 export const resolveTrackingSocketUrl = ({ trackingBaseUrl, apiBaseUrl, token }) => {
@@ -80,7 +150,7 @@ export const parseTrackingSocketMessage = (rawData) => {
 export const createSessionStartEvent = ({ contentId }) => ({
   event: "session:start",
   data: {
-    contentId: toStringSafe(contentId) || null,
+    ...(toStringSafe(contentId) ? { contentId: toStringSafe(contentId) } : {}),
     timestamp: Date.now(),
   },
 });
@@ -92,12 +162,17 @@ export const createMouseBatchEvent = (points) => ({
 
 export const createTrackingPoint = ({ x, y, timestamp = Date.now(), wordIndex }) => {
   const resolvedWordIndex = Number.isInteger(wordIndex) ? wordIndex : null;
+
   return {
     x,
     y,
     timestamp,
-    wordIndex: resolvedWordIndex,
-    word_index: resolvedWordIndex,
+    ...(resolvedWordIndex !== null
+      ? {
+          wordIndex: resolvedWordIndex,
+          word_index: resolvedWordIndex,
+        }
+      : {}),
   };
 };
 
@@ -111,10 +186,20 @@ export const createTooltipShownEvent = ({ tooltip, cognitiveState }) => ({
   data: {
     source: "frontend",
     timestamp: Date.now(),
-    wordIndex: Number.isInteger(tooltip?.wordIndex) ? tooltip.wordIndex : null,
-    word_index: Number.isInteger(tooltip?.wordIndex) ? tooltip.wordIndex : null,
-    original: toStringSafe(tooltip?.original) || null,
-    simplified: toStringSafe(tooltip?.simplified) || null,
-    cognitiveState: cognitiveState || tooltip?.cognitiveState || null,
+    ...(Number.isInteger(tooltip?.wordIndex)
+      ? {
+          wordIndex: tooltip.wordIndex,
+          word_index: tooltip.wordIndex,
+        }
+      : {}),
+    ...(toStringSafe(tooltip?.original)
+      ? { original: toStringSafe(tooltip?.original) }
+      : {}),
+    ...(toStringSafe(tooltip?.simplified)
+      ? { simplified: toStringSafe(tooltip?.simplified) }
+      : {}),
+    ...((cognitiveState || tooltip?.cognitiveState)
+      ? { cognitiveState: cognitiveState || tooltip?.cognitiveState }
+      : {}),
   },
 });
