@@ -44,6 +44,16 @@ const pickRefreshToken = (data) =>
   data?.data?.refresh_token ??
   data?.data?.refreshToken;
 
+const pickTrackingToken = (data) =>
+  data?.tracking_token ??
+  data?.trackingToken ??
+  data?.ws_token ??
+  data?.wsToken ??
+  data?.data?.tracking_token ??
+  data?.data?.trackingToken ??
+  data?.data?.ws_token ??
+  data?.data?.wsToken;
+
 const pickErrorMessage = (err) => {
   const body = err?.response?.data;
   if (!body) return err?.message || "Đăng nhập thất bại.";
@@ -106,11 +116,15 @@ const LoginPage = () => {
       const data = await AuthAPI.loginAPI(email.trim(), password);
       const token = pickToken(data);
       const refreshToken = pickRefreshToken(data);
+      const trackingToken = pickTrackingToken(data);
       if (token) {
         localStorage.setItem("access_token", token);
       }
       if (refreshToken) {
         localStorage.setItem("refresh_token", refreshToken);
+      }
+      if (trackingToken) {
+        localStorage.setItem("tracking_token", trackingToken);
       }
       navigate("/children/profile");
     } catch (err) {

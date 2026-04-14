@@ -152,6 +152,10 @@ const ChildrenLayout = () => {
         localStorage.removeItem("access_token");
         localStorage.removeItem("token");
         localStorage.removeItem("accessToken");
+        localStorage.removeItem("tracking_token");
+        localStorage.removeItem("trackingToken");
+        localStorage.removeItem("ws_token");
+        localStorage.removeItem("wsToken");
         navigate("/login", { replace: true });
         return;
       }
@@ -170,9 +174,19 @@ const ChildrenLayout = () => {
             data?.refreshToken ??
             data?.data?.refresh_token ??
             data?.data?.refreshToken;
+          const newTrackingToken =
+            data?.tracking_token ??
+            data?.trackingToken ??
+            data?.ws_token ??
+            data?.wsToken ??
+            data?.data?.tracking_token ??
+            data?.data?.trackingToken ??
+            data?.data?.ws_token ??
+            data?.data?.wsToken;
 
           if (newAccess) localStorage.setItem("access_token", newAccess);
           if (newRefresh) localStorage.setItem("refresh_token", newRefresh);
+          if (newTrackingToken) localStorage.setItem("tracking_token", newTrackingToken);
         })
         .catch(() => {
           localStorage.removeItem("access_token");
@@ -180,6 +194,10 @@ const ChildrenLayout = () => {
           localStorage.removeItem("accessToken");
           localStorage.removeItem("refresh_token");
           localStorage.removeItem("refreshToken");
+          localStorage.removeItem("tracking_token");
+          localStorage.removeItem("trackingToken");
+          localStorage.removeItem("ws_token");
+          localStorage.removeItem("wsToken");
           navigate("/login", { replace: true });
         });
     }
@@ -315,6 +333,12 @@ const ChildrenLayout = () => {
     localStorage.removeItem("access_token");
     localStorage.removeItem("token");
     localStorage.removeItem("accessToken");
+    localStorage.removeItem("refresh_token");
+    localStorage.removeItem("refreshToken");
+    localStorage.removeItem("tracking_token");
+    localStorage.removeItem("trackingToken");
+    localStorage.removeItem("ws_token");
+    localStorage.removeItem("wsToken");
 
     setStoreFilterOpen(false);
     navigate("/login", { replace: true });

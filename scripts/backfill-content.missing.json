@@ -1,0 +1,51 @@
+{
+  "generatedAt": "2026-04-13T07:53:01.509Z",
+  "itemCount": 5,
+  "items": [
+    {
+      "id": "5a045d11-665c-4117-9a5c-8494331d2114",
+      "title": "API_DEMO_SEGMENT_TEST_VN_DAU",
+      "difficulty": "EASY",
+      "age_group": "8-10",
+      "word_count": 40,
+      "body": "",
+      "note": "Paste raw story body text with at least 50 characters."
+    },
+    {
+      "id": "af6b6eb3-f74e-4754-b6d1-c9fcf08c332d",
+      "title": "API_DEMO_SEGMENT_TEST_3",
+      "difficulty": "EASY",
+      "age_group": "8-10",
+      "word_count": 18,
+      "body": "",
+      "note": "Paste raw story body text with at least 50 characters."
+    },
+    {
+      "id": "efb5d388-114f-47e0-a6bb-46090937ec91",
+      "title": "API_DEMO_SEGMENT_TEST_2",
+      "difficulty": "EASY",
+      "age_group": "8-10",
+      "word_count": 22,
+      "body": "",
+      "note": "Paste raw story body text with at least 50 characters."
+    },
+    {
+      "id": "735725b0-e032-4e65-ba93-4e3b8b97e332",
+      "title": "API_DEMO_SEGMENT_TEST",
+      "difficulty": "EASY",
+      "age_group": "8-10",
+      "word_count": 27,
+      "body": "",
+      "note": "Paste raw story body text with at least 50 characters."
+    },
+    {
+      "id": "2218f71c-3c46-4557-9d80-67c73e638617",
+      "title": "DEMO_SEGMENTED_VN_FRONTEND",
+      "difficulty": "EASY",
+      "age_group": "8-10",
+      "word_count": 12,
+      "body": "",
+      "note": "Paste raw story body text with at least 50 characters."
+    }
+  ]
+}
