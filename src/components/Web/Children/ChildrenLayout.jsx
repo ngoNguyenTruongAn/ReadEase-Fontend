@@ -186,7 +186,8 @@ const ChildrenLayout = () => {
 
           if (newAccess) localStorage.setItem("access_token", newAccess);
           if (newRefresh) localStorage.setItem("refresh_token", newRefresh);
-          if (newTrackingToken) localStorage.setItem("tracking_token", newTrackingToken);
+          if (newTrackingToken)
+            localStorage.setItem("tracking_token", newTrackingToken);
         })
         .catch(() => {
           localStorage.removeItem("access_token");
@@ -256,7 +257,7 @@ const ChildrenLayout = () => {
         const data = await AuthAPI.getProfileAPI();
         const root = data?.data ?? data?.user ?? data;
         const fullName =
-          root?.displayName ??
+          root?.display_name ??
           root?.fullName ??
           root?.name ??
           root?.userName ??
@@ -280,7 +281,7 @@ const ChildrenLayout = () => {
 
         if (cancelled) return;
         setProfileInfo({
-          fullName: String(fullName || "").trim(),
+          display_name: String(fullName || "").trim(),
           username: String(username || "").trim(),
           joinedAt: formatJoinedAt(joinedAtRaw),
           guardians: pickGuardians(root),
@@ -288,7 +289,7 @@ const ChildrenLayout = () => {
       } catch {
         if (!cancelled)
           setProfileInfo({
-            fullName: "",
+            display_name: "",
             username: "",
             joinedAt: "",
             guardians: [],
@@ -381,7 +382,7 @@ const ChildrenLayout = () => {
                     </div>
                     <div className="children-side-profile-header">
                       <p className="children-side-profile-name">
-                        {profileInfo.fullName || "Họ và Tên"}
+                        {profileInfo.display_name || "Họ và Tên"}
                       </p>
                       <p className="children-side-profile-username">
                         {profileInfo.username || "Username"}
