@@ -51,4 +51,17 @@ describe("hybridVietnameseSegmentation", () => {
     const entries = extractHybridVietnameseWordEntries(source);
     expect(entries.map((entry) => entry.value)).toEqual(["con", "bò", "ăn", "cỏ"]);
   });
+
+  it("normalizes punctuation spacing from segmented ML output", () => {
+    const malformedSegmentedText =
+      "Người chủ cho rằng lừa đã già và giếng cũng cần lấp ,nên quyết định lấp đất xuống giếng .";
+
+    const tokens = parseHybridVietnameseTokens(malformedSegmentedText);
+    const renderedText = tokens.map((token) => token.value).join("");
+
+    expect(renderedText).toContain("lấp, nên");
+    expect(renderedText).toContain("giếng.");
+    expect(renderedText).not.toContain("lấp ,");
+    expect(renderedText).not.toContain("giếng .");
+  });
 });

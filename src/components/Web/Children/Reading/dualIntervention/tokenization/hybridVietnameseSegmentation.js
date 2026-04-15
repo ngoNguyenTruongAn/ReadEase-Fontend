@@ -5,6 +5,11 @@ const toStringSafe = (value) => String(value ?? "");
 
 const normalizeParagraphBreaks = (value) => toStringSafe(value).replace(/\r\n?/g, "\n");
 
+const normalizeSegmentedPunctuationSpacing = (value) =>
+  normalizeParagraphBreaks(value)
+    .replace(/[ \t\f\v]+([,.;!?…:])/g, "$1")
+    .replace(/([,.;!?…:])(?=[\p{L}_])/gu, "$1 ");
+
 const normalizeWordCandidate = (value) =>
   toStringSafe(value)
     .replace(/_/g, " ")
@@ -16,15 +21,15 @@ export const resolveSegmentedTextInput = ({ segmentedText, bodySegmented, fallba
   const segmentedCandidate =
     toStringSafe(segmentedText).trim() || toStringSafe(bodySegmented).trim();
   if (segmentedCandidate) {
-    return normalizeParagraphBreaks(segmentedCandidate);
+    return normalizeSegmentedPunctuationSpacing(segmentedCandidate);
   }
 
   const fallbackCandidate = toStringSafe(fallbackText).trim() || toStringSafe(body).trim();
-  return normalizeParagraphBreaks(fallbackCandidate);
+  return normalizeSegmentedPunctuationSpacing(fallbackCandidate);
 };
 
 export const parseHybridVietnameseTokens = (inputText) => {
-  const source = normalizeParagraphBreaks(inputText);
+  const source = normalizeSegmentedPunctuationSpacing(inputText);
   if (!source) return [];
 
   const parts = source.split(/(\n|[ \t\f\v]+)/g).filter((part) => part !== "");
