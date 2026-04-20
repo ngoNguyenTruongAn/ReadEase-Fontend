@@ -13,6 +13,7 @@ import ReadingPage from "./components/Web/Children/Reading/ReadingPage";
 import ForgotPassword from "./components/Login/LoginPage/ForgotPassword/ForgotPassword";
 import ForgotPasswordConfirm from "./components/Login/LoginPage/ForgotPassword/ForgotPasswordConfirm";
 import { ToastContainer } from "react-toastify";
+import GuardianLayout from "./components/Web/Guardian/GuardianLayout";
 function App() {
   return (
     <>
@@ -47,6 +48,9 @@ function App() {
         {/* standalone reading */}
         <Route path="/children/reading" element={<ReadingPage />} />
       </Routes>
+
+      {/* guardian */}
+      <Route path="/guardian" element={<GuardianLayout />} />
 
       <ToastContainer
         position="top-right"

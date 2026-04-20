@@ -4,6 +4,8 @@
   width: 100%;
   min-height: 100vh;
   display: flex;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .children-home-page {
@@ -13,6 +15,7 @@
   margin: 0 auto;
   display: flex;
   align-items: flex-start;
+  height: 100vh;
 }
 
 .children-side {
@@ -446,6 +449,8 @@
   flex-direction: column;
   margin: 0 30px;
   min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
 }
 
 .children-navbar {
@@ -671,6 +676,14 @@
   padding: 24px 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  min-height: 0;
+  scrollbar-width: none; // Firefox
+  -ms-overflow-style: none; // legacy Edge/IE
+}
+
+.children-content::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 @keyframes dropdownSlideIn {
