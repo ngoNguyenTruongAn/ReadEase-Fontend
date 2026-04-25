@@ -14,6 +14,8 @@ import ForgotPassword from "./components/Login/LoginPage/ForgotPassword/ForgotPa
 import ForgotPasswordConfirm from "./components/Login/LoginPage/ForgotPassword/ForgotPasswordConfirm";
 import { ToastContainer } from "react-toastify";
 import GuardianLayout from "./components/Web/Guardian/GuardianLayout";
+import DashboardGuardian from "./components/Web/Guardian/DashboardGuardian/DashboardGuardian";
+import Children from "./components/Web/Guardian/Children/Children";
 function App() {
   return (
     <>
@@ -47,10 +49,14 @@ function App() {
 
         {/* standalone reading */}
         <Route path="/children/reading" element={<ReadingPage />} />
+
+        <Route path="/guardian" element={<GuardianLayout />}>
+          <Route path="/guardian" element={<DashboardGuardian />} />
+          <Route path="/guardian/children" element={<Children />} />
+        </Route>
       </Routes>
 
       {/* guardian */}
-      <Route path="/guardian" element={<GuardianLayout />} />
 
       <ToastContainer
         position="top-right"

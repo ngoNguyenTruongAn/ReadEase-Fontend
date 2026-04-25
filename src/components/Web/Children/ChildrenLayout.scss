@@ -587,7 +587,7 @@
       lighten($primary-color, 10%)
     );
     color: #ffffff !important;
-    border-color: $primary-color;
+    // border-color: $primary-color;
     box-shadow: 0 4px 16px rgba($primary-color, 0.3);
   }
 }
