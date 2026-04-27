@@ -72,10 +72,50 @@ const refreshTokenAPI = async (refreshToken) => {
   }
 };
 
+const forgotPasswordAPI = async (email) => {
+  try {
+    const response = await instance.post("auth/forgot-password", { email });
+    return response.data;
+  } catch (error) {
+    console.error("Error forgot password:", error);
+    throw error;
+  }
+};
+
+const resetPasswordAPI = async (email, code, newPassword) => {
+  try {
+    const response = await instance.post("auth/reset-password", {
+      email,
+      code,
+      newPassword,
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error resetting password:", error);
+    throw error;
+  }
+};
+
+const changePasswordAPI = async (oldPassword, newPassword) => {
+  try {
+    const response = await instance.post("auth/change-password", {
+      oldPassword,
+      newPassword,
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error changing password:", error);
+    throw error;
+  }
+};
+
 export default {
   loginAPI,
   registerAPI,
   verifyOTPAPI,
   getProfileAPI,
   refreshTokenAPI,
+  forgotPasswordAPI,
+  resetPasswordAPI,
+  changePasswordAPI,
 };

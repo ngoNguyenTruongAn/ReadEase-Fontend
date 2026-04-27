@@ -37,6 +37,8 @@ const RegisterPage = () => {
       localStorage.setItem("registerEmail", email.trim());
       localStorage.setItem("registerUserName", displayName.trim());
       localStorage.setItem("registerRole", role);
+      // Dùng khi gửi lại mã (gọi lại đăng ký); xóa sau khi xác thực email xong
+      sessionStorage.setItem("registerPendingPassword", password);
       navigate("/validate");
     } catch (error) {
       const body = error?.response?.data;
@@ -47,20 +49,13 @@ const RegisterPage = () => {
         response: body,
         request: {
           email: email.trim(),
-          displayName: displayName.trim(),
+          display_name: displayName.trim(),
+          password,
           role,
         },
-        message: error?.message,
+        message: error?.message || "Đăng ký thất bại.",
       });
-      const message =
-        (Array.isArray(body?.error?.details) && body.error.details[0]) ||
-        (typeof body?.error?.message === "string" && body.error.message) ||
-        (typeof body?.message === "string" && body.message) ||
-        (Array.isArray(body?.message) && body.message.join(", ")) ||
-        (typeof body?.error === "string" && body.error) ||
-        error?.message ||
-        "Đăng ký thất bại.";
-      window.alert(message);
+      window.alert(error?.message || "Đăng ký thất bại.");
     } finally {
       setLoading(false);
     }

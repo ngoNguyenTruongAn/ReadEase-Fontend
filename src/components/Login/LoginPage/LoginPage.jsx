@@ -1,13 +1,13 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { jwtDecode } from "jwt-decode";
 import AuthAPI from "../../../service/Auth/AuthAPI";
 import "./LoginPage.scss";
 
-/** Định dạng email thực tế (không chấp nhận khoảng trắng, cần domain + TLD) */
 const EMAIL_REGEX =
-  /^[a-zA-Z0-9](?:[a-zA-Z0-9._%+-]*[a-zA-Z0-9])?@[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,}$/;
+  /^[a-zA-Z0-9](?:[a-zA-Z0-9._%+-]*[a-zA-Z0-9])?@[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?.[a-zA-Z]{2,}$/;
 
-const MIN_PASSWORD_LEN = 6;
+const MIN_PASSWORD_LEN = 8;
 const MAX_PASSWORD_LEN = 128;
 const MAX_EMAIL_LEN = 254;
 
@@ -44,6 +44,16 @@ const pickRefreshToken = (data) =>
   data?.data?.refresh_token ??
   data?.data?.refreshToken;
 
+const pickTrackingToken = (data) =>
+  data?.tracking_token ??
+  data?.trackingToken ??
+  data?.ws_token ??
+  data?.wsToken ??
+  data?.data?.tracking_token ??
+  data?.data?.trackingToken ??
+  data?.data?.ws_token ??
+  data?.data?.wsToken;
+
 const pickErrorMessage = (err) => {
   const body = err?.response?.data;
   if (!body) return err?.message || "Đăng nhập thất bại.";
@@ -53,8 +63,23 @@ const pickErrorMessage = (err) => {
   return "Đăng nhập thất bại.";
 };
 
+// 🔥 map role → route
+const getRedirectByRole = (role) => {
+  switch (role) {
+    case "ROLE_CHILD":
+      return "/children/profile";
+    case "ROLE_GUARDIAN":
+      return "/guardian";
+    case "ROLE_CLINICIAN":
+      return "/clinician";
+    default:
+      return "/";
+  }
+};
+
 const LoginPage = () => {
   const navigate = useNavigate();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [touched, setTouched] = useState({ email: false, password: false });
@@ -93,7 +118,6 @@ const LoginPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError("");
-
     const emailErr = validateEmail(email);
     const passwordErr = validatePassword(password);
     setTouched({ email: true, password: true });
@@ -104,15 +128,27 @@ const LoginPage = () => {
     setLoading(true);
     try {
       const data = await AuthAPI.loginAPI(email.trim(), password);
+
       const token = pickToken(data);
       const refreshToken = pickRefreshToken(data);
-      if (token) {
-        localStorage.setItem("access_token", token);
+      const trackingToken = pickTrackingToken(data);
+
+      if (!token) {
+        throw new Error("Không nhận được access token.");
       }
-      if (refreshToken) {
-        localStorage.setItem("refresh_token", refreshToken);
-      }
-      navigate("/children/profile");
+
+      // 💾 lưu token
+      localStorage.setItem("access_token", token);
+      if (refreshToken) localStorage.setItem("refresh_token", refreshToken);
+      if (trackingToken) localStorage.setItem("tracking_token", trackingToken);
+
+      // 🔥 decode role
+      const decoded = jwtDecode(token);
+      const role = decoded?.role;
+
+      // 🚀 redirect theo role
+      const redirectPath = getRedirectByRole(role);
+      navigate(redirectPath);
     } catch (err) {
       setFormError(pickErrorMessage(err));
     } finally {
@@ -122,77 +158,58 @@ const LoginPage = () => {
 
   const showEmailError = touched.email && errors.email;
   const showPasswordError = touched.password && errors.password;
-  const emailId = "login-email";
-  const passwordId = "login-password";
-  const emailErrId = "login-email-error";
-  const passwordErrId = "login-password-error";
 
   return (
     <div className="form-wrapper login-page">
+      {" "}
       <h1 className="title">
-        <span style={{ color: "#FBBF24" }}>ReadEase</span> chào mừng bạn!
+        <span style={{ color: "#FBBF24" }}>ReadEase</span> chào mừng bạn!{" "}
       </h1>
-
       <p className="subtitle subtitle--bold">
         Nơi việc học tập diễn ra theo tốc độ của con bạn.
       </p>
-
       <form className="login-form" onSubmit={handleSubmit} noValidate>
-        {formError ? (
+        {formError && (
           <p
             className="login-form__error login-form__error--global"
             role="alert"
           >
             {formError}
           </p>
-        ) : null}
+        )}
 
         <div
           className={`input-group ${showEmailError ? "input-group--invalid" : ""}`}
         >
           <input
-            id={emailId}
             type="email"
-            name="email"
             placeholder="Email đăng nhập"
             value={email}
             onChange={handleEmailChange}
             onBlur={handleEmailBlur}
-            autoComplete="email"
-            aria-invalid={showEmailError ? "true" : "false"}
-            aria-describedby={showEmailError ? emailErrId : undefined}
           />
-          {showEmailError ? (
-            <p id={emailErrId} className="input-group__error" role="alert">
-              {errors.email}
-            </p>
-          ) : null}
+          {showEmailError && (
+            <p className="input-group__error">{errors.email}</p>
+          )}
         </div>
 
         <div
           className={`input-group ${showPasswordError ? "input-group--invalid" : ""}`}
         >
           <input
-            id={passwordId}
             type="password"
-            name="password"
             placeholder="Mật khẩu"
             value={password}
             onChange={handlePasswordChange}
             onBlur={handlePasswordBlur}
-            autoComplete="current-password"
-            aria-invalid={showPasswordError ? "true" : "false"}
-            aria-describedby={showPasswordError ? passwordErrId : undefined}
           />
-          {showPasswordError ? (
-            <p id={passwordErrId} className="input-group__error" role="alert">
-              {errors.password}
-            </p>
-          ) : null}
+          {showPasswordError && (
+            <p className="input-group__error">{errors.password}</p>
+          )}
         </div>
 
         <div className="forgot-password">
-          <a href="#forgot">Quên mật khẩu?</a>
+          <Link to="/forgot-password">Quên mật khẩu?</Link>
         </div>
 
         <button
@@ -204,8 +221,7 @@ const LoginPage = () => {
           {loading ? "Đang đăng nhập..." : "Đăng nhập"}
         </button>
       </form>
-
-      <p className="signup-link" style={{ fontWeight: "bold" }}>
+      <p className="signup-link">
         Bạn chưa có tài khoản? <Link to="/register">Đăng ký</Link>
       </p>
     </div>

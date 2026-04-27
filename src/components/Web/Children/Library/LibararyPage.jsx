@@ -1,75 +1,69 @@
-import React from "react";
-import { useOutletContext } from "react-router-dom";
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate, useOutletContext } from "react-router-dom";
+import { saveSelectedStory } from "../Reading/readingUtils";
+import ClinicianAPI from "../../../../service/Clinician/ClinicianAPI";
 import "./LibararyPage.scss";
 
-// TODO: sau này thay bằng data thật từ API
-const MOCK_STORIES = [
-  {
-    id: 1,
-    title: "Cây tre trăm đốt",
-    coverUrl:
-      "https://images.pexels.com/photos/5904935/pexels-photo-5904935.jpeg?auto=compress&w=600",
-  },
-  {
-    id: 2,
-    title: "Sơn Tinh Thủy Tinh",
-    coverUrl:
-      "https://images.pexels.com/photos/3225517/pexels-photo-3225517.jpeg?auto=compress&w=600",
-  },
-  {
-    id: 3,
-    title: "Cây khế trả vàng",
-    coverUrl:
-      "https://images.pexels.com/photos/2745957/pexels-photo-2745957.jpeg?auto=compress&w=600",
-  },
-  {
-    id: 4,
-    title: "Bánh chưng bánh giầy",
-    coverUrl:
-      "https://images.pexels.com/photos/3732567/pexels-photo-3732567.jpeg?auto=compress&w=600",
-  },
-  {
-    id: 5,
-    title: "Thánh Gióng",
-    coverUrl:
-      "https://images.pexels.com/photos/4619565/pexels-photo-4619565.jpeg?auto=compress&w=600",
-  },
-  {
-    id: 6,
-    title: "Sự tích dưa hấu",
-    coverUrl:
-      "https://images.pexels.com/photos/5945845/pexels-photo-5945845.jpeg?auto=compress&w=600",
-  },
-  {
-    id: 7,
-    title: "Sự tích dưa hấu",
-    coverUrl:
-      "https://images.pexels.com/photos/5945845/pexels-photo-5945845.jpeg?auto=compress&w=600",
-  },
-  {
-    id: 8,
-    title: "Sự tích dưa hấu",
-    coverUrl:
-      "https://images.pexels.com/photos/5945845/pexels-photo-5945845.jpeg?auto=compress&w=600",
-  },
-  {
-    id: 9,
-    title: "Sự tích dưa hấu",
-    coverUrl:
-      "https://images.pexels.com/photos/5945845/pexels-photo-5945845.jpeg?auto=compress&w=600",
-  },
-  {
-    id: 10,
-    title: "Sự tích dưa hấu",
-    coverUrl:
-      "https://images.pexels.com/photos/5945845/pexels-photo-5945845.jpeg?auto=compress&w=600",
-  },
-];
+const normalizeList = (res) => {
+  const data = res?.data ?? res;
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.contents)) return data.contents;
+  if (Array.isArray(data?.data)) return data.data;
+  return [];
+};
 
 const LibararyPage = () => {
+  const navigate = useNavigate();
   const { setSideStory } = useOutletContext() ?? {};
 
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [items, setItems] = useState([]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const res = await ClinicianAPI.getContents();
+        if (!alive) return;
+        setItems(normalizeList(res));
+      } catch (err) {
+        if (!alive) return;
+        const msg =
+          err?.response?.data?.message ||
+          err?.message ||
+          "Không lấy được danh sách nội dung.";
+        setError(Array.isArray(msg) ? msg.join(", ") : msg);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const stories = useMemo(() => {
+    return items.map((it) => ({
+      id: it?.id,
+      title: it?.title ?? "—",
+      coverUrl: it?.cover_image_url || it?.coverUrl || "",
+      description: it?.body || "",
+    }));
+  }, [items]);
+
   const handleClickStory = (story) => {
+    const selectedStory = {
+      id: story.id,
+      title: story.title,
+      coverUrl: story.coverUrl,
+      description:
+        story.description || "Ngày xưa, ở một làng nọ, có một anh nông phu nghèo.",
+    };
+
     setSideStory?.({
       kind: "story",
       src: story.coverUrl,
@@ -78,13 +72,19 @@ const LibararyPage = () => {
       description:
         "“Ngày xưa, ở một làng nọ, có một anh nông phu nghèo...Ngày xưa, ở một làng nọ, có một anh nông phu nghèo...Ngày xưa, ở một làng nọ, có một anh nông phu nghèo...Ngày xưa, ở một làng nọ, có một anh nông phu nghèo...”",
     });
-    console.log("Open story:", story);
+
+    saveSelectedStory(selectedStory);
+    navigate("/children/calibration/start", {
+      state: { story: selectedStory },
+    });
   };
 
   return (
     <div className="library-page">
+      {error ? <div className="library-error">{error}</div> : null}
+      {loading ? <div className="library-loading">Đang tải...</div> : null}
       <div className="library-grid">
-        {MOCK_STORIES.map((story) => (
+        {stories.map((story) => (
           <button
             key={story.id}
             type="button"
@@ -93,7 +93,9 @@ const LibararyPage = () => {
           >
             <div
               className="library-card-cover"
-              style={{ backgroundImage: `url(${story.coverUrl})` }}
+              style={
+                story.coverUrl ? { backgroundImage: `url(${story.coverUrl})` } : {}
+              }
             />
           </button>
         ))}

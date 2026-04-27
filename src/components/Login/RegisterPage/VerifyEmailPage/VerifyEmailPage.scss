@@ -59,6 +59,66 @@
   }
 }
 
+.validate-resend {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.validate-resend-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  width: 100%;
+}
+
+.validate-resend-hint {
+  margin: 0;
+  font-size: 0.9rem;
+  color: $text-main;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.validate-resend-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.95rem;
+  line-height: 1.2;
+  vertical-align: baseline;
+  font-weight: 800;
+  color: $primary-color;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+
+  &:hover:not(:disabled) {
+    color: darken($primary-color, 8%);
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    text-decoration: none;
+  }
+}
+
+.validate-resend-success {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #1a7f37;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.35;
+}
+
 .btn-validate {
   width: 100%;
   height: 52px;

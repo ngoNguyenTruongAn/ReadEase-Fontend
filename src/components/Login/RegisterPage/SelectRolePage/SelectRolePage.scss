@@ -173,3 +173,69 @@
     font-weight: 600;
   }
 }
+
+// ===== INVITE CODE =====
+.invite-box {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: #f9f9f9;
+  margin-bottom: 16px;
+}
+
+.invite-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.invite-label {
+  font-size: 0.86rem;
+  color: $text-secondary;
+  font-weight: 700;
+}
+
+.invite-copy-btn {
+  border: 1px solid rgba($primary-color, 0.35);
+  background: rgba($primary-color, 0.08);
+  color: $primary-color;
+  font-weight: 800;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: 0.2s;
+
+  &:hover {
+    background: rgba($primary-color, 0.12);
+    transform: translateY(-1px);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+  }
+}
+
+.invite-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  letter-spacing: 0.12em;
+  font-size: 1.6rem;
+  font-weight: 900;
+  color: $text-main;
+  padding: 12px 12px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1.5px dashed rgba(0, 0, 0, 0.2);
+  text-align: center;
+  user-select: all;
+}
+
+.invite-hint {
+  margin: 10px 0 0;
+  font-size: 0.9rem;
+  color: $text-secondary;
+  line-height: 1.4;
+}

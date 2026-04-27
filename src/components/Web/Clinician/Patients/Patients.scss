@@ -1,0 +1,126 @@
+@use "../../../../styles/variables" as *;
+
+.clp {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.clp-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.clp-title {
+  font-size: 1.35rem;
+  font-weight: 950;
+  color: $text-main;
+  line-height: 1.1;
+}
+
+.clp-subtitle {
+  margin-top: 6px;
+  color: $text-secondary;
+  font-weight: 600;
+  max-width: 720px;
+}
+
+.clp-card {
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.05);
+}
+
+.clp-card__title {
+  font-weight: 950;
+  color: $text-main;
+  margin-bottom: 12px;
+  font-size: 1.05rem;
+}
+
+.clp-field__label {
+  display: block;
+  font-size: 0.86rem;
+  color: $text-secondary;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.clp-field__input {
+  width: 100%;
+  height: 46px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(0, 0, 0, 0.14);
+  background: #ffffff;
+  padding: 10px 12px;
+  font-weight: 700;
+  outline: none;
+  transition: border-color 0.2s ease;
+
+  &:focus {
+    border-color: rgba($primary-color, 0.7);
+  }
+}
+
+.clp-empty {
+  padding: 14px 12px;
+  color: $text-secondary;
+  font-weight: 700;
+}
+
+.clp-tableWrap {
+  width: 100%;
+  overflow: auto;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: #ffffff;
+}
+
+.clp-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 860px;
+
+  th,
+  td {
+    padding: 12px 12px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    text-align: left;
+    vertical-align: top;
+    font-size: 0.92rem;
+  }
+
+  th {
+    position: sticky;
+    top: 0;
+    background: #fbfbfb;
+    color: $text-secondary;
+    font-weight: 950;
+    z-index: 1;
+  }
+
+  td {
+    color: $text-main;
+    font-weight: 650;
+    max-width: 320px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  tbody tr:hover td {
+    background: rgba($primary-color, 0.04);
+  }
+}
+
+@media (max-width: 720px) {
+  .clp-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
