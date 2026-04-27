@@ -96,7 +96,7 @@ const VerifyEmailPage = () => {
       }
       // Các trường hợp còn lại (Parent/Lecturer) -> Vào ChildrenLayout
       else {
-        navigate("/children");
+        navigate("/login");
       }
 
       // Sau khi điều hướng thành công, có thể xóa email/role tạm để bảo mật
@@ -187,9 +187,7 @@ const VerifyEmailPage = () => {
               <button
                 type="button"
                 className="validate-resend-btn"
-                disabled={
-                  !email.trim() || resendLoading || resendCooldown > 0
-                }
+                disabled={!email.trim() || resendLoading || resendCooldown > 0}
                 onClick={handleResend}
               >
                 {resendLoading

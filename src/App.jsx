@@ -16,6 +16,12 @@ import { ToastContainer } from "react-toastify";
 import GuardianLayout from "./components/Web/Guardian/GuardianLayout";
 import DashboardGuardian from "./components/Web/Guardian/DashboardGuardian/DashboardGuardian";
 import Children from "./components/Web/Guardian/Children/Children";
+import ClinicianLayout from "./components/Web/Clinician/ClinicianLayout";
+import DashboardClinician from "./components/Web/Clinician/DashboardClinician/DashboardClinician";
+import Patients from "./components/Web/Clinician/Patients/Patients";
+import Reports from "./components/Web/Clinician/Reports/Reports";
+import ClinicianProfile from "./components/Web/Clinician/Profile/ClinicianProfile";
+import Content from "./components/Web/Clinician/Content/Content";
 function App() {
   return (
     <>
@@ -53,6 +59,15 @@ function App() {
         <Route path="/guardian" element={<GuardianLayout />}>
           <Route path="/guardian" element={<DashboardGuardian />} />
           <Route path="/guardian/children" element={<Children />} />
+        </Route>
+
+        {/* clinician */}
+        <Route path="/clinician" element={<ClinicianLayout />}>
+          <Route path="/clinician" element={<DashboardClinician />} />
+          <Route path="/clinician/contents" element={<Content />} />
+          <Route path="/clinician/patients" element={<Patients />} />
+          <Route path="/clinician/reports" element={<Reports />} />
+          <Route path="/clinician/profile" element={<ClinicianProfile />} />
         </Route>
       </Routes>
 
