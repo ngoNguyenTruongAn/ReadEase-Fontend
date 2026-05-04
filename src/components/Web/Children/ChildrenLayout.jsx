@@ -1,12 +1,12 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import "./ChildrenLayout.scss";
 import redMonster from "../../../assets/image/reading book and sitting on the grass 1.png";
 import childrenTokenIcon from "../../../assets/image/sparkles 1.png";
 import monsterStore from "../../../assets/image/MonterStore.png";
-import { FaFilter } from "react-icons/fa";
 import AuthAPI from "../../../service/Auth/AuthAPI";
 import { toast } from "react-toastify";
+import ChildrenAPI from "../../../service/Children/ChildrenAPI";
 
 const ChildrenLayout = () => {
   const defaultSideStory = useMemo(
@@ -18,9 +18,6 @@ const ChildrenLayout = () => {
   const navigate = useNavigate();
   const isStoreRoute = location.pathname.startsWith("/children/store");
   const isProfileRoute = location.pathname.startsWith("/children/profile");
-  const [storeFilter, setStoreFilter] = useState("profession");
-  const [storeFilterOpen, setStoreFilterOpen] = useState(false);
-  const storeFilterWrapRef = useRef(null);
   const [profileInfo, setProfileInfo] = useState({
     fullName: "",
     username: "",
@@ -47,7 +44,37 @@ const ChildrenLayout = () => {
     confirmPassword: null,
   });
   const showStoreSidebar = isStoreRoute;
+  const [balance, setBalance] = useState(0);
+  const [childId, setChildId] = useState(
+    () => localStorage.getItem("childId") || "",
+  );
 
+  useEffect(() => {
+    // Đồng bộ childId từ profile (profile trả field id)
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const payload = await AuthAPI.getProfileAPI();
+        const root = payload?.data ?? payload?.user ?? payload ?? {};
+        const id = String(root?.id || "").trim();
+        if (cancelled || !id) return;
+        setChildId(id);
+        localStorage.setItem("childId", id);
+      } catch {
+        // ignore
+      }
+    };
+    if (!childId) run();
+    return () => {
+      cancelled = true;
+    };
+  }, [childId]);
+  useEffect(() => {
+    if (!childId) return;
+    ChildrenAPI.getBalance(childId).then((data) => {
+      setBalance(data.data.balance);
+    });
+  }, [childId]);
   const validateOldPassword = (raw) => {
     const v = String(raw ?? "");
     if (!v.trim()) return "Vui lòng nhập mật khẩu hiện tại.";
@@ -81,26 +108,6 @@ const ChildrenLayout = () => {
     if (typeof body.error === "string") return body.error;
     return "Đổi mật khẩu thất bại.";
   };
-
-  const STORE_FILTERS = [
-    { id: "profession", label: "Nghề nghiệp" },
-    { id: "activity", label: "Hoạt động" },
-    { id: "animal", label: "Động vật" },
-  ];
-
-  useEffect(() => {
-    if (!storeFilterOpen) return;
-
-    const onDocMouseDown = (e) => {
-      const el = storeFilterWrapRef.current;
-      if (!el) return;
-      if (el.contains(e.target)) return;
-      setStoreFilterOpen(false);
-    };
-
-    document.addEventListener("mousedown", onDocMouseDown);
-    return () => document.removeEventListener("mousedown", onDocMouseDown);
-  }, [storeFilterOpen]);
 
   useEffect(() => {
     // Chỉ check khi đang ở luồng /children (vào thẳng từ URL cũng áp dụng).
@@ -341,7 +348,6 @@ const ChildrenLayout = () => {
     localStorage.removeItem("ws_token");
     localStorage.removeItem("wsToken");
 
-    setStoreFilterOpen(false);
     navigate("/login", { replace: true });
   };
 
@@ -748,59 +754,19 @@ const ChildrenLayout = () => {
                 >
                   Thư viện
                 </NavLink>
-                <div
-                  ref={storeFilterWrapRef}
-                  className="children-store-filter-wrap"
+                <NavLink
+                  to="/children/store"
+                  className={({ isActive }) =>
+                    `children-nav-link ${isActive ? "is-active" : ""}`
+                  }
                 >
-                  <div
-                    className={`children-store-nav-trigger ${isStoreRoute ? "is-active" : ""}`}
-                  >
-                    <button
-                      type="button"
-                      className={`children-nav-link children-nav-link--button ${
-                        isStoreRoute ? "is-active" : ""
-                      }`}
-                      aria-haspopup="menu"
-                      aria-expanded={storeFilterOpen ? "true" : "false"}
-                      onClick={() => {
-                        // Click vào "Cửa hàng" luôn mở dropdown để preview (không chuyển trang).
-                        // Nếu đang ở store thì toggle dropdown.
-                        if (isStoreRoute) setStoreFilterOpen((v) => !v);
-                        else setStoreFilterOpen(true);
-                      }}
-                    >
-                      Cửa hàng
-                      <FaFilter className="children-filter-icon" />
-                    </button>
-                  </div>
-
-                  {storeFilterOpen && (
-                    <div className="children-store-filter-dropdown">
-                      <div className="children-store-filter-list">
-                        {STORE_FILTERS.map((filter) => (
-                          <button
-                            key={filter.id}
-                            className={`children-store-filter-item ${
-                              storeFilter === filter.id ? "is-active" : ""
-                            }`}
-                            onClick={() => {
-                              setStoreFilter(filter.id);
-                              setStoreFilterOpen(false);
-                              if (!isStoreRoute) navigate("/children/store");
-                            }}
-                          >
-                            {filter.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                  Cửa hàng
+                </NavLink>
               </nav>
             </div>
 
             <div className="children-navbar-right children-token">
-              <span className="children-coin-amount">120</span>
+              <span className="children-coin-amount">{balance}</span>
               <img
                 src={childrenTokenIcon}
                 alt="Children Token Icon"
@@ -814,8 +780,6 @@ const ChildrenLayout = () => {
               context={{
                 setSideStory,
                 resetSideStory: () => setSideStory(defaultSideStory),
-                storeFilter,
-                setStoreFilter,
               }}
             />
           </section>

@@ -71,6 +71,16 @@ $store-border-active: #42d3c1;
   flex-direction: column;
 }
 
+.store-toast {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(66, 211, 193, 0.16);
+  border: 1px solid rgba(66, 211, 193, 0.35);
+  color: rgba($store-navy, 0.9);
+  font-weight: 800;
+}
+
 .store-toolbar {
   position: relative;
   top: auto;
@@ -129,6 +139,40 @@ $store-border-active: #42d3c1;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 22px 20px;
+}
+
+.store-card-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.store-buy-btn {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 2px solid rgba(66, 211, 193, 0.55);
+  background: #ffffff;
+  color: $store-navy;
+  font-weight: 900;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 22px rgba(26, 43, 74, 0.08);
+    background: rgba(66, 211, 193, 0.12);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+    transform: none;
+    box-shadow: none;
+  }
 }
 
 .store-card {
@@ -203,6 +247,64 @@ $store-border-active: #42d3c1;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   line-height: 1.35;
+}
+
+.store-card-desc {
+  margin-top: 8px;
+  font-size: 0.9rem;
+  font-weight: 650;
+  color: rgba($store-navy, 0.75);
+  line-height: 1.3;
+}
+
+.store-card-meta {
+  width: 100%;
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 10px;
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: rgba($store-navy, 0.9);
+}
+
+.store-card-cost {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(66, 211, 193, 0.16);
+}
+
+.store-card-stock {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(26, 43, 74, 0.08);
+}
+
+.store-card-inactive {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 99, 99, 0.14);
+  color: rgba($store-navy, 0.95);
+}
+
+.store-state {
+  margin: 6px 0 16px;
+  font-size: 0.95rem;
+  font-weight: 750;
+  color: rgba($store-navy, 0.8);
+}
+
+.store-state--error {
+  color: rgba(220, 38, 38, 0.95);
+}
+
+.store-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+  transform: none;
+  box-shadow: none;
 }
 
 @media (max-width: 768px) {
