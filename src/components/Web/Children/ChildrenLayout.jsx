@@ -772,6 +772,14 @@ const ChildrenLayout = () => {
                 alt="Children Token Icon"
                 className="children-coin-icon"
               />
+
+              <button
+                type="button"
+                className="children-logout-btn"
+                onClick={handleLogout}
+              >
+                Đăng xuất
+              </button>
             </div>
           </header>
 

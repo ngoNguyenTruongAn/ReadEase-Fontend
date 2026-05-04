@@ -212,7 +212,12 @@ const LoginPage = () => {
           <Link to="/forgot-password">Quên mật khẩu?</Link>
         </div>
 
-        <button type="submit" className="btn-login" disabled={loading}>
+        <button
+          type="submit"
+          className="btn-login"
+          disabled={loading}
+          style={{ background: "#FBBF24" }}
+        >
           {loading ? "Đang đăng nhập..." : "Đăng nhập"}
         </button>
       </form>
