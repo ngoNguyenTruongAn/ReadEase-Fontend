@@ -104,6 +104,7 @@ const CalibrationStartPage = () => {
         duration: GAME_DURATION * 1000,
         gameType: "target_tracking",
         childId: childId,
+        score: score,
       });
     } catch (error) {
       console.error("Calibration submit failed:", error);
