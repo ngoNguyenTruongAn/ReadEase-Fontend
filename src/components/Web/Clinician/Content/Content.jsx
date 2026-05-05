@@ -167,9 +167,19 @@ const Content = () => {
     const id = row?.id;
     if (!id) return;
 
+    const pickBody = (src) =>
+      src?.body ??
+      src?.content ??
+      src?.text ??
+      src?.description ??
+      src?.data?.body ??
+      src?.data?.content ??
+      src?.data?.text ??
+      "";
+
     setEditingId(String(id));
     setEditTitle(String(row?.title ?? ""));
-    setEditBody(String(row?.body ?? ""));
+    setEditBody(String(pickBody(row) ?? ""));
     setEditDifficulty(String(row?.difficulty ?? "EASY"));
     setEditAgeGroup(String(row?.age_group ?? ""));
     setEditCoverUrl(String(row?.cover_image_url ?? ""));
@@ -180,7 +190,7 @@ const Content = () => {
       const data = detail?.data ?? detail;
       if (data) {
         setEditTitle(String(data?.title ?? row?.title ?? ""));
-        setEditBody(String(data?.body ?? row?.body ?? ""));
+        setEditBody(String(pickBody(data) ?? pickBody(row) ?? ""));
         setEditDifficulty(
           String(data?.difficulty ?? row?.difficulty ?? "EASY"),
         );

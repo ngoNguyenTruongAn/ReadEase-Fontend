@@ -105,6 +105,66 @@
   }
 }
 
+.login-invite {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+}
+
+.login-invite__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.login-invite__label {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: $text-main;
+}
+
+.login-invite__copy {
+  border: 1px solid rgba($primary-color, 0.35);
+  background: rgba($primary-color, 0.08);
+  color: $primary-color;
+  font-weight: 800;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: 0.2s;
+
+  &:hover {
+    background: rgba($primary-color, 0.12);
+    transform: translateY(-1px);
+  }
+}
+
+.login-invite__code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  letter-spacing: 0.12em;
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: $text-main;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1.5px dashed rgba(0, 0, 0, 0.18);
+  text-align: center;
+  user-select: all;
+}
+
+.login-invite__meta {
+  margin: 10px 0 0;
+  font-size: 0.9rem;
+  color: $text-secondary;
+  line-height: 1.4;
+}
+
 .signup-link {
   margin-top: 25px;
   text-align: center;

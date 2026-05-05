@@ -1,16 +1,70 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./SelectRolePage.scss";
+import ChildrenAPI from "../../../../service/Children/ChildrenAPI";
 
 const SelectRolePage = () => {
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
+  const [loadingInvite, setLoadingInvite] = useState(false);
+  const [inviteError, setInviteError] = useState("");
+  const [inviteMeta, setInviteMeta] = useState({
+    inviteCode: "",
+    expiresAt: "",
+    isExpired: false,
+    isLinked: false,
+  });
 
   const email = useMemo(() => localStorage.getItem("registerEmail") || "", []);
-  const inviteCode = useMemo(
+  const localInviteCode = useMemo(
     () => localStorage.getItem("inviteCode") || "",
     [],
   );
+  const inviteCode = inviteMeta.inviteCode || localInviteCode;
+
+  useEffect(() => {
+    let mounted = true;
+    const run = async () => {
+      setLoadingInvite(true);
+      setInviteError("");
+      try {
+        const res = await ChildrenAPI.getInviteCode();
+        const data = res?.data ?? res ?? {};
+        const code = String(data?.inviteCode || "").trim();
+        if (!mounted) return;
+        setInviteMeta({
+          inviteCode: code,
+          expiresAt: data?.expiresAt || "",
+          isExpired: Boolean(data?.isExpired),
+          isLinked: Boolean(data?.isLinked),
+        });
+        if (code) localStorage.setItem("inviteCode", code);
+      } catch (e) {
+        if (!mounted) return;
+        const body = e?.response?.data;
+        const apiErr = body?.error;
+        const detail =
+          (Array.isArray(apiErr?.details) && apiErr.details[0]) ||
+          (Array.isArray(body?.details) && body.details[0]) ||
+          null;
+        setInviteError(
+          detail ||
+            apiErr?.message ||
+            body?.message ||
+            e?.message ||
+            "Không lấy được mã mời. Vui lòng thử lại.",
+        );
+      } finally {
+        if (mounted) setLoadingInvite(false);
+      }
+    };
+
+    // Luôn thử gọi để lấy lại mã mời (dựa vào JWT), kể cả khi localStorage đã có.
+    run();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const copyInviteCode = async () => {
     if (!inviteCode) return;
@@ -53,15 +107,24 @@ const SelectRolePage = () => {
             type="button"
             className="invite-copy-btn"
             onClick={copyInviteCode}
-            disabled={!inviteCode}
+            disabled={!inviteCode || loadingInvite}
           >
             {copied ? "Đã copy" : "Copy mã"}
           </button>
         </div>
 
         <div className="invite-code" aria-live="polite">
-          {inviteCode || "Không tìm thấy mã mời"}
+          {loadingInvite ? "Đang tải..." : inviteCode || "Không tìm thấy mã mời"}
         </div>
+
+        {inviteError ? <p className="invite-error">{inviteError}</p> : null}
+        {!inviteError && inviteMeta.expiresAt ? (
+          <p className="invite-meta">
+            Hết hạn: <strong>{String(inviteMeta.expiresAt)}</strong>
+            {inviteMeta.isExpired ? " (Đã hết hạn)" : ""}
+            {inviteMeta.isLinked ? " • Đã liên kết" : ""}
+          </p>
+        ) : null}
 
         <p className="invite-hint">
           Phụ huynh nhập mã này ở màn hình liên kết tài khoản.

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import AuthAPI from "../../../service/Auth/AuthAPI";
+import ChildrenAPI from "../../../service/Children/ChildrenAPI";
 import "./LoginPage.scss";
 
 const EMAIL_REGEX =
@@ -63,6 +64,40 @@ const pickErrorMessage = (err) => {
   return "Đăng nhập thất bại.";
 };
 
+const pickApiDetail = (err) => {
+  const body = err?.response?.data;
+  const apiErr = body?.error;
+  return (
+    (Array.isArray(apiErr?.details) && apiErr.details[0]) ||
+    (Array.isArray(body?.details) && body.details[0]) ||
+    null
+  );
+};
+
+const shouldFetchInviteOnLoginError = (err) => {
+  const status = err?.response?.status;
+  const body = err?.response?.data;
+  const apiErr = body?.error;
+  const detail = pickApiDetail(err);
+  const msg = String(
+    detail || apiErr?.message || body?.message || err?.message || "",
+  ).toLowerCase();
+
+  // Heuristic: các case thường gặp khi tài khoản trẻ chưa được xác nhận/liên kết.
+  return (
+    status === 400 ||
+    status === 401 ||
+    status === 403 ||
+    String(apiErr?.code || "").includes("LINK") ||
+    msg.includes("link") ||
+    msg.includes("liên kết") ||
+    msg.includes("guardian") ||
+    msg.includes("phụ huynh") ||
+    msg.includes("confirm") ||
+    msg.includes("xác nhận")
+  );
+};
+
 // 🔥 map role → route
 const getRedirectByRole = (role) => {
   switch (role) {
@@ -86,6 +121,9 @@ const LoginPage = () => {
   const [errors, setErrors] = useState({ email: null, password: null });
   const [formError, setFormError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState("");
+  const [inviteInfo, setInviteInfo] = useState(null);
 
   const setFieldError = (field, message) => {
     setErrors((prev) => ({ ...prev, [field]: message }));
@@ -150,9 +188,61 @@ const LoginPage = () => {
       const redirectPath = getRedirectByRole(role);
       navigate(redirectPath);
     } catch (err) {
-      setFormError(pickErrorMessage(err));
+      const message = pickApiDetail(err) || pickErrorMessage(err);
+      setFormError(message);
+
+      // Nếu backend trả token (dù login bị chặn vì chưa liên kết), lưu token để gọi my-invite-code.
+      const tokenFromError = pickToken(err?.response?.data);
+      if (tokenFromError) localStorage.setItem("access_token", tokenFromError);
+
+      setInviteInfo(null);
+      setInviteError("");
+
+      if (shouldFetchInviteOnLoginError(err)) {
+        try {
+          setInviteLoading(true);
+          const res = await ChildrenAPI.getInviteCode();
+          const payload = res?.data ?? res ?? {};
+          const code = String(payload?.inviteCode || "").trim();
+          setInviteInfo({
+            inviteCode: code,
+            expiresAt: payload?.expiresAt || "",
+            isExpired: Boolean(payload?.isExpired),
+            isLinked: Boolean(payload?.isLinked),
+          });
+          if (code) localStorage.setItem("inviteCode", code);
+        } catch (e2) {
+          const detail2 = pickApiDetail(e2);
+          const body2 = e2?.response?.data;
+          const apiErr2 = body2?.error;
+          setInviteError(
+            detail2 ||
+              apiErr2?.message ||
+              body2?.message ||
+              e2?.message ||
+              "Không lấy được mã mời.",
+          );
+        } finally {
+          setInviteLoading(false);
+        }
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const copyInvite = async () => {
+    const code = inviteInfo?.inviteCode;
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = code;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
     }
   };
 
@@ -177,6 +267,37 @@ const LoginPage = () => {
             {formError}
           </p>
         )}
+
+        {inviteLoading ? (
+          <p className="login-form__error" role="status">
+            Đang lấy mã mời...
+          </p>
+        ) : null}
+
+        {!inviteLoading && inviteInfo?.inviteCode ? (
+          <div className="login-invite">
+            <div className="login-invite__row">
+              <span className="login-invite__label">Mã mời phụ huynh</span>
+              <button
+                type="button"
+                className="login-invite__copy"
+                onClick={copyInvite}
+              >
+                Copy mã
+              </button>
+            </div>
+            <div className="login-invite__code" aria-live="polite">
+              {inviteInfo.inviteCode}
+            </div>
+            {inviteInfo.expiresAt ? (
+              <p className="login-invite__meta">
+                Hết hạn: <strong>{String(inviteInfo.expiresAt)}</strong>
+                {inviteInfo.isExpired ? " (Đã hết hạn)" : ""}
+                {inviteInfo.isLinked ? " • Đã liên kết" : ""}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         <div
           className={`input-group ${showEmailError ? "input-group--invalid" : ""}`}

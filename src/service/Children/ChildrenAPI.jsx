@@ -10,6 +10,17 @@ const getBalance = async (childId) => {
   }
 };
 
+//lay lai ma moi
+const getInviteCode = async () => {
+  try {
+    const response = await instance.get(`auth/my-invite-code`);
+    return response.data;
+  } catch (error) {
+    console.error("Error getting invite code:", error);
+    throw error;
+  }
+};
+
 //lich su tieu dung
 const getConsumptionHistory = async (childId) => {
   try {
@@ -52,4 +63,5 @@ export default {
   getConsumptionHistory,
   getRewardList,
   redeemReward,
+  getInviteCode,
 };

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import GuardianAPI from "../../../../service/Guardian/GuardianAPI";
+import { humanizeApiError } from "../../../../service/instance";
 import "./Children.scss";
 
 const Children = () => {
@@ -72,11 +73,9 @@ const Children = () => {
       setChildren(normalizeChildren(res));
       console.log(normalizeChildren(res));
     } catch (err) {
-      const msg =
-        err?.response?.data?.message ||
-        err?.message ||
-        "Không lấy được danh sách tài khoản của con.";
-      setError(Array.isArray(msg) ? msg.join(", ") : msg);
+      setError(
+        humanizeApiError(err, "Không lấy được danh sách tài khoản của con."),
+      );
     } finally {
       setLoading(false);
     }
@@ -99,11 +98,9 @@ const Children = () => {
       setInviteCode("");
       await fetchChildren();
     } catch (err) {
-      const msg =
-        err?.response?.data?.message ||
-        err?.message ||
-        "Liên kết thất bại. Vui lòng thử lại.";
-      toast.error(Array.isArray(msg) ? msg.join(", ") : msg);
+      toast.error(
+        humanizeApiError(err, "Liên kết thất bại. Vui lòng thử lại."),
+      );
     } finally {
       setLinking(false);
     }
