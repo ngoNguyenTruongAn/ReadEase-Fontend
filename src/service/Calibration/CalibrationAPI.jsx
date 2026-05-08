@@ -1,10 +1,17 @@
 import instance from "../instance";
 
-const calibrateSessionAPI = async ({ events, duration = 30000, gameType = "target_tracking", childId }) => {
+const calibrateSessionAPI = async ({
+  events,
+  duration = 30000,
+  gameType = "target_tracking",
+  childId,
+  score = 0,
+}) => {
   const payload = {
     events,
     duration,
     gameType,
+    score,
   };
 
   if (childId) {
