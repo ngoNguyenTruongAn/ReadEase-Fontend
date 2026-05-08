@@ -26,7 +26,7 @@ export const getSelectedStory = () => {
 
 const toStringSafe = (value) => String(value ?? "").trim();
 
-const splitIntoPages = (rawText, maxCharsPerPage = 420) => {
+export const splitIntoPages = (rawText, maxCharsPerPage = 420) => {
   const normalized = toStringSafe(rawText).replace(/\r/g, "").trim();
   if (!normalized) {
     return [STORY_EMPTY_PLACEHOLDER];
@@ -169,6 +169,8 @@ export const normalizeStoryPayload = (story, selectedStory) => {
         contentId,
         pages,
         segmentedPages,
+        rawBodyText: pages.join("\n\n"),
+        rawSegmentedBodyText: segmentedPages.join("\n\n"),
         isContentAvailable: true,
       };
     }
@@ -185,6 +187,8 @@ export const normalizeStoryPayload = (story, selectedStory) => {
     contentId,
     pages,
     segmentedPages,
+    rawBodyText: fallbackRawBody || pages.join("\n\n"),
+    rawSegmentedBodyText: fallbackSegmentedBody || segmentedPages.join("\n\n"),
     isContentAvailable: Boolean(fallbackRawBody || fallbackSegmentedBody),
   };
 };
@@ -197,6 +201,8 @@ export const buildUnavailableStoryPayload = (story, selectedStory) => ({
   contentId: extractStoryId(story) ?? extractStoryId(selectedStory),
   pages: [""],
   segmentedPages: [""],
+  rawBodyText: "",
+  rawSegmentedBodyText: "",
   isContentAvailable: false,
 });
 
@@ -213,4 +219,8 @@ export const STORY_FALLBACK = {
     "Bỗng một hôm, có con chim lớn bay tới ăn khế. Người em buồn rầu khóc kể gia cảnh khó khăn. Chim bèn nói: Ăn một quả trả cục vàng, may túi ba gang mang đi mà đựng.",
     "Người em làm theo lời chim dặn, được chim chở ra đảo vàng lấy đủ ba gang túi rồi trở về. Từ đó, gia đình người em no đủ và sống hiền lành, chăm chỉ như trước.",
   ],
+  rawBodyText:
+    "Năm ấy, cây khế trong vườn nhà người em bỗng sai quả lạ thường, cành nào cũng trĩu quả ngọt, vàng ruộm. Người em nhìn cây khế mà lòng khấp khởi mừng thầm tính chuyện bán khế lấy tiền dong gạo.\n\nBỗng một hôm, có con chim lớn bay tới ăn khế. Người em buồn rầu khóc kể gia cảnh khó khăn. Chim bèn nói: Ăn một quả trả cục vàng, may túi ba gang mang đi mà đựng.\n\nNgười em làm theo lời chim dặn, được chim chở ra đảo vàng lấy đủ ba gang túi rồi trở về. Từ đó, gia đình người em no đủ và sống hiền lành, chăm chỉ như trước.",
+  rawSegmentedBodyText:
+    "Năm ấy, cây khế trong vườn nhà người em bỗng sai quả lạ thường, cành nào cũng trĩu quả ngọt, vàng ruộm. Người em nhìn cây khế mà lòng khấp khởi mừng thầm tính chuyện bán khế lấy tiền dong gạo.\n\nBỗng một hôm, có con chim lớn bay tới ăn khế. Người em buồn rầu khóc kể gia cảnh khó khăn. Chim bèn nói: Ăn một quả trả cục vàng, may túi ba gang mang đi mà đựng.\n\nNgười em làm theo lời chim dặn, được chim chở ra đảo vàng lấy đủ ba gang túi rồi trở về. Từ đó, gia đình người em no đủ và sống hiền lành, chăm chỉ như trước.",
 };

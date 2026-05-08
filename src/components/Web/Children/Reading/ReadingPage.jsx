@@ -16,6 +16,7 @@ import {
   getSelectedStory,
   normalizeStoryPayload,
   pickStoryFromCollection,
+  splitIntoPages,
   STORY_CONTENT_UNAVAILABLE_MESSAGE,
   STORY_FALLBACK,
 } from "./readingUtils";
@@ -67,6 +68,13 @@ const maskSocketUrlToken = (rawUrl) => {
   }
 };
 
+const resolveAdaptivePageCharLimit = (viewportWidth) => {
+  if (!Number.isFinite(viewportWidth) || viewportWidth <= 0) return 300;
+  if (viewportWidth <= 640) return 180;
+  if (viewportWidth <= 980) return 240;
+  return 300;
+};
+
 const ReadingPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -94,6 +102,9 @@ const ReadingPage = () => {
   const [avatarUrl, setAvatarUrl] = useState("");
   const [isDebugPanelExpanded, setIsDebugPanelExpanded] = useState(false);
   const [contentAvailability, setContentAvailability] = useState(CONTENT_AVAILABILITY_DEFAULT);
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth : 1200,
+  );
 
   const {
     handleHoverStart: handleHoverSpeechStart,
@@ -343,11 +354,49 @@ const ReadingPage = () => {
     setCurrentPage(0);
   }, [story.title]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const handleResize = () => {
+      setViewportWidth(window.innerWidth);
+    };
+
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, []);
+
+  const adaptivePageCharLimit = useMemo(
+    () => resolveAdaptivePageCharLimit(viewportWidth),
+    [viewportWidth],
+  );
+
+  const renderedStoryPages = useMemo(() => {
+    const fallbackRawBody = Array.isArray(story?.pages)
+      ? story.pages.filter(Boolean).join("\n\n")
+      : "";
+    const fallbackRawSegmentedBody = Array.isArray(story?.segmentedPages)
+      ? story.segmentedPages.filter(Boolean).join("\n\n")
+      : fallbackRawBody;
+
+    const rawBodyText = String(story?.rawBodyText || fallbackRawBody || "");
+    const rawSegmentedBodyText = String(
+      story?.rawSegmentedBodyText || fallbackRawSegmentedBody || rawBodyText,
+    );
+
+    return {
+      pages: splitIntoPages(rawBodyText, adaptivePageCharLimit),
+      segmentedPages: splitIntoPages(rawSegmentedBodyText, adaptivePageCharLimit),
+    };
+  }, [adaptivePageCharLimit, story]);
+
   const isContentUnavailable = contentAvailability.isUnavailable;
-  const totalPages = Math.max(story.pages.length, 1);
+  const totalPages = Math.max(renderedStoryPages.pages.length, 1);
   const safeCurrentPage = Math.min(currentPage, totalPages - 1);
-  const pageText = story.pages[safeCurrentPage] ?? "";
-  const pageSegmentedText = story?.segmentedPages?.[safeCurrentPage] ?? pageText;
+  const pageText = renderedStoryPages.pages[safeCurrentPage] ?? "";
+  const pageSegmentedText = renderedStoryPages.segmentedPages?.[safeCurrentPage] ?? pageText;
   const pageWordEntries = useMemo(
     () => extractHybridVietnameseWordEntries(pageSegmentedText),
     [pageSegmentedText],
