@@ -104,10 +104,18 @@ const LibararyPage = () => {
             className="library-card"
             onClick={() => handleClickStory(story)}
           >
-            <div
-              className="library-card-cover"
-              style={{ backgroundImage: `url(${story.coverUrl})` }}
-            />
+            <div className="library-card-cover">
+              <img
+                src={story.coverUrl}
+                alt={story.title}
+                className="library-card-cover-img"
+                loading="lazy"
+              />
+            </div>
+
+            <div className="library-card-body">
+              <p className="library-card-title">{story.title}</p>
+            </div>
           </button>
         ))}
       </div>

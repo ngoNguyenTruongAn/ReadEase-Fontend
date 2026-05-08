@@ -1,31 +1,55 @@
+@use "sass:color";
 @use "../../../styles/variables" as *;
+
+$children-content-half-width: 600px;
+$children-shell-padding: 16px;
+$children-shell-max-width: 1232px;
+$children-side-width: 368px;
+$children-layout-gap: 44px;
 
 .children-page {
   width: 100%;
   min-height: 100vh;
   display: flex;
+  background: $bg-visual;
 }
 
 .children-home-page {
-  max-width: 1200px;
+  max-width: $children-shell-max-width;
   width: 100%;
   min-height: 100vh;
   margin: 0 auto;
   display: flex;
   align-items: flex-start;
+  gap: $children-layout-gap;
+  padding: $children-shell-padding;
+  box-sizing: border-box;
+}
+
+// Keeps the fixed sidebar represented in flex flow, including its padding.
+.children-side-placeholder {
+  width: $children-side-width;
+  flex: 0 0 $children-side-width;
+  align-self: stretch;
+  pointer-events: none;
 }
 
 .children-side {
-  width: 260px;
-  background: rgba($bg-visual, 0.2);
+  box-sizing: border-box;
+  position: fixed;
+  top: $children-shell-padding;
+  bottom: $children-shell-padding;
+  // Aligns with the flex container content edge while the sidebar stays fixed.
+  left: max(#{$children-shell-padding}, calc(50vw - #{$children-content-half-width}));
+  width: $children-side-width;
+  background: rgba($status-warning, 20%);
+  border-radius: 32px;
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 32px 16px;
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  align-self: flex-start;
+  padding: 40px 24px;
+  overflow-y: auto;
+  z-index: 1;
 }
 
 .children-side-hero {
@@ -49,7 +73,7 @@
   display: block;
   object-fit: contain;
   object-position: center;
-  margin-top: 100px;
+  margin-top: 0;
 }
 
 .children-side-text {
@@ -166,29 +190,34 @@
   transition: 0.2s;
 
   &:hover {
-    background: darken($primary-color, 6%);
+    background: color.adjust($primary-color, $lightness: -6%);
     transform: translateY(-1px);
   }
 }
 
 .children-main {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  margin: 0 30px;
-  min-height: 100vh;
+  overflow: visible;
 }
 
 .children-navbar {
+  box-sizing: border-box;
   border-radius: 35px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 16px 32px;
   background: rgba($bg-navbar, 0.7);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   position: sticky;
   top: 16px;
   z-index: 10;
+  width: 100%;
+  margin: 0;
 }
 
 .children-navbar-left {
@@ -213,7 +242,7 @@
 
 .children-nav-tabs {
   display: flex;
-  gap: 16px;
+  gap: 28px;
   align-items: center;
 }
 
@@ -226,14 +255,8 @@
 .children-store-nav-trigger {
   cursor: pointer;
 
-  &.is-active .children-nav-link {
-    background: #ffffff !important;
-    color: $primary-color !important;
-    font-weight: 700 !important;
-  }
-
   &:hover .children-nav-link {
-    background: rgba(255, 255, 255, 0.6);
+    color: $text-main;
   }
 }
 
@@ -310,7 +333,7 @@
     background: linear-gradient(
       135deg,
       $primary-color,
-      lighten($primary-color, 10%)
+      color.adjust($primary-color, $lightness: 10%)
     );
     color: #ffffff !important;
     border-color: $primary-color;
@@ -333,10 +356,25 @@
   line-height: 1;
   white-space: nowrap;
 
+  &:hover {
+    color: $text-main;
+  }
+
   &.is-active {
-    background: #ffffff;
-    color: $primary-color;
-    font-weight: 700;
+    background: transparent;
+    color: $text-main;
+    font-weight: 900;
+  }
+
+  &.is-active::after {
+    content: "";
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: -10px;
+    height: 3px;
+    border-radius: 999px;
+    background: $primary-color;
   }
 }
 
@@ -364,9 +402,14 @@
 .children-navbar-right {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-weight: 700;
   color: $primary-color;
+}
+
+.children-coin-amount {
+  font-size: 1.1rem;
+  font-weight: 900;
 }
 
 .children-logout-btn {
@@ -394,14 +437,15 @@
 }
 
 .children-coin-icon {
-  font-size: 1.2rem;
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
 }
 
 .children-content {
   flex: 1;
   padding: 24px 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  overflow: visible;
 }
 
 @keyframes dropdownSlideIn {

@@ -192,6 +192,7 @@ const ChildrenLayout = () => {
   return (
     <div className="children-page">
       <div className="children-home-page">
+        <div className="children-side-placeholder" aria-hidden="true" />
         <aside className="children-side">
           <div className="children-side-hero">
             {showStoreSidebar ? (
@@ -298,6 +299,7 @@ const ChildrenLayout = () => {
                   className={({ isActive }) =>
                     `children-nav-link ${isActive ? "is-active" : ""}`
                   }
+                  onClick={() => setStoreFilterOpen(false)}
                 >
                   Hồ sơ
                 </NavLink>
@@ -306,7 +308,10 @@ const ChildrenLayout = () => {
                   className={({ isActive }) =>
                     `children-nav-link ${isActive ? "is-active" : ""}`
                   }
-                  onClick={() => setSideStory(defaultSideStory)}
+                  onClick={() => {
+                    setStoreFilterOpen(false);
+                    setSideStory(defaultSideStory);
+                  }}
                 >
                   Thư viện
                 </NavLink>
@@ -323,14 +328,19 @@ const ChildrenLayout = () => {
                       aria-haspopup="menu"
                       aria-expanded={storeFilterOpen ? "true" : "false"}
                       onClick={() => {
-                        // Click vào "Cửa hàng" luôn mở dropdown để preview (không chuyển trang).
-                        // Nếu đang ở store thì toggle dropdown.
-                        if (isStoreRoute) setStoreFilterOpen((v) => !v);
-                        else setStoreFilterOpen(true);
+                        // Theo layout design: tab "Cửa hàng" hoạt động như nav.
+                        // Dropdown filter chỉ dùng khi đang ở trang store.
+                        if (isStoreRoute) {
+                          setStoreFilterOpen((v) => !v);
+                          return;
+                        }
+
+                        setStoreFilterOpen(false);
+                        navigate("/children/store");
                       }}
                     >
                       Cửa hàng
-                      <FaFilter className="children-filter-icon" />
+                      {isStoreRoute && <FaFilter className="children-filter-icon" />}
                     </button>
                   </div>
 
@@ -367,13 +377,15 @@ const ChildrenLayout = () => {
                 className="children-coin-icon"
               />
 
-              <button
-                type="button"
-                className="children-logout-btn"
-                onClick={handleLogout}
-              >
-                Đăng xuất
-              </button>
+              {isProfileRoute && (
+                <button
+                  type="button"
+                  className="children-logout-btn"
+                  onClick={handleLogout}
+                >
+                  Đăng xuất
+                </button>
+              )}
             </div>
           </header>
 
