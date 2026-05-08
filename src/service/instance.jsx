@@ -1,1 +1,1 @@
-export { default } from "../app/instance";
+export { default, logApiError, humanizeApiError } from "../app/instance";

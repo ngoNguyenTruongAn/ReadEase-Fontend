@@ -1,0 +1,74 @@
+@use "../../../../styles/variables" as *;
+
+.clpr {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.clpr-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.clpr-title {
+  font-size: 1.35rem;
+  font-weight: 950;
+  color: $text-main;
+  line-height: 1.1;
+}
+
+.clpr-subtitle {
+  margin-top: 6px;
+  color: $text-secondary;
+  font-weight: 600;
+  max-width: 720px;
+}
+
+.clpr-card {
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.05);
+}
+
+.clpr-card__title {
+  font-weight: 950;
+  color: $text-main;
+  margin-bottom: 12px;
+  font-size: 1.05rem;
+}
+
+.clpr-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.clpr-field {
+  border-radius: 14px;
+  background: rgba($bg-navbar, 0.45);
+  padding: 12px 14px;
+}
+
+.clpr-field__label {
+  color: $text-secondary;
+  font-weight: 850;
+  font-size: 0.88rem;
+}
+
+.clpr-field__value {
+  margin-top: 6px;
+  color: $text-main;
+  font-weight: 950;
+}
+
+@media (max-width: 820px) {
+  .clpr-grid {
+    grid-template-columns: 1fr;
+  }
+}
+

@@ -1,0 +1,143 @@
+@use "../../../../styles/variables" as *;
+
+.cdc {
+  width: 100%;
+}
+
+.cdc-stats {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.cdc-stat {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
+}
+
+.cdc-stat__icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: rgba($primary-color, 0.14);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.cdc-ico {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  display: inline-block;
+}
+
+.cdc-stat__label {
+  color: $text-secondary;
+  font-weight: 800;
+  font-size: 0.9rem;
+}
+
+.cdc-stat__value {
+  margin-top: 2px;
+  color: $text-main;
+  font-weight: 950;
+  font-size: 1.15rem;
+  line-height: 1.1;
+}
+
+.cdc-section {
+  margin-top: 14px;
+}
+
+.cdc-section__title {
+  font-weight: 950;
+  color: $text-main;
+  margin: 6px 0 10px;
+}
+
+.cdc-list {
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 14px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+.cdc-item {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+
+  &:first-child {
+    border-top: none;
+  }
+}
+
+.cdc-item__title {
+  font-weight: 950;
+  color: $text-main;
+}
+
+.cdc-item__sub {
+  margin-top: 4px;
+  color: $text-secondary;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.cdc-item__right {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 240px;
+}
+
+.cdc-item__status {
+  color: $text-secondary;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.cdc-item__link {
+  border: none;
+  background: transparent;
+  color: $primary-color;
+  font-weight: 900;
+  cursor: pointer;
+  padding: 0;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+@media (max-width: 900px) {
+  .cdc-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .cdc-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .cdc-item__right {
+    min-width: 0;
+    width: 100%;
+    align-items: flex-start;
+    text-align: left;
+  }
+}
+

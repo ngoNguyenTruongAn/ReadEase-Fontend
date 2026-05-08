@@ -5,6 +5,7 @@ import flyingBee from "../../../../assets/image/flying bee.png";
 import gameBee from "../../../../assets/image/output-onlinegiftools.gif";
 import sparklesIcon from "../../../../assets/image/sparkles 1.png";
 import CalibrationAPI from "../../../../service/Calibration/CalibrationAPI";
+import AuthAPI from "../../../../service/Auth/AuthAPI";
 import { getSelectedStory } from "../Reading/readingUtils";
 
 const GAME_DURATION = 30;
@@ -59,15 +60,25 @@ const CalibrationStartPage = () => {
     y: 0,
     pulse: 0,
   });
+  const [childId, setChildId] = useState(null);
   const selectedStory = location.state?.story ?? getSelectedStory();
 
-  const handleStart = () => {
+  const handleStart = async () => {
     setScore(0);
     setTimeLeft(GAME_DURATION);
     capturedEventsRef.current = [];
     hoverCooldownRef.current = false;
     calibrationSubmittingRef.current = false;
     setBeeVisible(true);
+
+    // Lấy childId từ profile
+    try {
+      const profilePayload = await AuthAPI.getProfileAPI();
+      const profile = profilePayload?.data || profilePayload?.user || profilePayload || {};
+      setChildId(profile.id || profile._id || profile.user_id || null);
+    } catch (e) {
+      setChildId(null);
+    }
 
     const container = containerRef.current?.getBoundingClientRect();
     if (container) {
@@ -92,6 +103,7 @@ const CalibrationStartPage = () => {
         events: capturedEventsRef.current,
         duration: GAME_DURATION * 1000,
         gameType: "target_tracking",
+        childId: childId,
       });
     } catch (error) {
       console.error("Calibration submit failed:", error);

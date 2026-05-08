@@ -119,4 +119,75 @@ instance.interceptors.response.use(
   },
 );
 
+/** Ghi log đầy đủ lỗi HTTP từ axios (mở DevTools → Console khi debug). */
+export function logApiError(error, context = "axios") {
+  const res = error?.response;
+  const data = res?.data;
+  let responseDataKeys = null;
+  if (data != null && typeof data === "object" && !Array.isArray(data)) {
+    responseDataKeys = Object.keys(data);
+  }
+
+  const snapshot = {
+    context,
+    requestUrl: error?.config?.url,
+    requestMethod: error?.config?.method,
+    baseURL: error?.config?.baseURL,
+    axiosMessage: error?.message,
+    axiosCode: error?.code,
+    responseStatus: res?.status,
+    responseStatusText: res?.statusText,
+    responseData: data,
+    responseDataKeys,
+  };
+
+  console.error("[API error]", snapshot);
+  if (data !== undefined) {
+    console.error("[API error] response.data (chi tiết):", data);
+  }
+}
+
+const textFromValue = (v) => {
+  if (v == null || v === "") return null;
+  if (typeof v === "number") return null;
+  if (typeof v === "boolean") return v ? "Có" : "Không";
+  if (typeof v === "string") {
+    const t = v.trim();
+    return t || null;
+  }
+  if (Array.isArray(v)) {
+    const parts = v.map((x) => textFromValue(x)).filter(Boolean);
+    return parts.length ? parts.join(", ") : null;
+  }
+  if (typeof v === "object") {
+    try {
+      return JSON.stringify(v);
+    } catch {
+      return String(v);
+    }
+  }
+  return String(v);
+};
+
+/** Chuỗi hiển thị cho người dùng; tránh dùng `message` kiểu số làm nội dung chính. */
+export function humanizeApiError(err, fallback = "Đã xảy ra lỗi.") {
+  const d = err?.response?.data;
+
+  if (typeof d === "string") {
+    const t = d.trim();
+    if (t) return t;
+  }
+
+  const fromBody =
+    textFromValue(d?.message) ||
+    textFromValue(d?.error) ||
+    textFromValue(d?.errors) ||
+    textFromValue(d?.detail) ||
+    textFromValue(d?.description) ||
+    textFromValue(d?.msg);
+
+  const fromAxios = textFromValue(err?.message);
+  return fromBody || fromAxios || fallback;
+}
+
 export default instance;

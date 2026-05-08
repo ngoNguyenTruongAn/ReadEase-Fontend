@@ -1,13 +1,14 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { jwtDecode } from "jwt-decode";
 import AuthAPI from "../../../service/Auth/AuthAPI";
+import ChildrenAPI from "../../../service/Children/ChildrenAPI";
 import "./LoginPage.scss";
 
-/** Định dạng email thực tế (không chấp nhận khoảng trắng, cần domain + TLD) */
 const EMAIL_REGEX =
-  /^[a-zA-Z0-9](?:[a-zA-Z0-9._%+-]*[a-zA-Z0-9])?@[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,}$/;
+  /^[a-zA-Z0-9](?:[a-zA-Z0-9._%+-]*[a-zA-Z0-9])?@[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?.[a-zA-Z]{2,}$/;
 
-const MIN_PASSWORD_LEN = 6;
+const MIN_PASSWORD_LEN = 8;
 const MAX_PASSWORD_LEN = 128;
 const MAX_EMAIL_LEN = 254;
 
@@ -63,14 +64,66 @@ const pickErrorMessage = (err) => {
   return "Đăng nhập thất bại.";
 };
 
+const pickApiDetail = (err) => {
+  const body = err?.response?.data;
+  const apiErr = body?.error;
+  return (
+    (Array.isArray(apiErr?.details) && apiErr.details[0]) ||
+    (Array.isArray(body?.details) && body.details[0]) ||
+    null
+  );
+};
+
+const shouldFetchInviteOnLoginError = (err) => {
+  const status = err?.response?.status;
+  const body = err?.response?.data;
+  const apiErr = body?.error;
+  const detail = pickApiDetail(err);
+  const msg = String(
+    detail || apiErr?.message || body?.message || err?.message || "",
+  ).toLowerCase();
+
+  // Heuristic: các case thường gặp khi tài khoản trẻ chưa được xác nhận/liên kết.
+  return (
+    status === 400 ||
+    status === 401 ||
+    status === 403 ||
+    String(apiErr?.code || "").includes("LINK") ||
+    msg.includes("link") ||
+    msg.includes("liên kết") ||
+    msg.includes("guardian") ||
+    msg.includes("phụ huynh") ||
+    msg.includes("confirm") ||
+    msg.includes("xác nhận")
+  );
+};
+
+// 🔥 map role → route
+const getRedirectByRole = (role) => {
+  switch (role) {
+    case "ROLE_CHILD":
+      return "/children/profile";
+    case "ROLE_GUARDIAN":
+      return "/guardian";
+    case "ROLE_CLINICIAN":
+      return "/clinician";
+    default:
+      return "/";
+  }
+};
+
 const LoginPage = () => {
   const navigate = useNavigate();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [touched, setTouched] = useState({ email: false, password: false });
   const [errors, setErrors] = useState({ email: null, password: null });
   const [formError, setFormError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState("");
+  const [inviteInfo, setInviteInfo] = useState(null);
 
   const setFieldError = (field, message) => {
     setErrors((prev) => ({ ...prev, [field]: message }));
@@ -103,7 +156,6 @@ const LoginPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError("");
-
     const emailErr = validateEmail(email);
     const passwordErr = validatePassword(password);
     setTouched({ email: true, password: true });
@@ -114,99 +166,171 @@ const LoginPage = () => {
     setLoading(true);
     try {
       const data = await AuthAPI.loginAPI(email.trim(), password);
+
       const token = pickToken(data);
       const refreshToken = pickRefreshToken(data);
       const trackingToken = pickTrackingToken(data);
-      if (token) {
-        localStorage.setItem("access_token", token);
+
+      if (!token) {
+        throw new Error("Không nhận được access token.");
       }
-      if (refreshToken) {
-        localStorage.setItem("refresh_token", refreshToken);
-      }
-      if (trackingToken) {
-        localStorage.setItem("tracking_token", trackingToken);
-      }
-      navigate("/children/profile");
+
+      // 💾 lưu token
+      localStorage.setItem("access_token", token);
+      if (refreshToken) localStorage.setItem("refresh_token", refreshToken);
+      if (trackingToken) localStorage.setItem("tracking_token", trackingToken);
+
+      // 🔥 decode role
+      const decoded = jwtDecode(token);
+      const role = decoded?.role;
+
+      // 🚀 redirect theo role
+      const redirectPath = getRedirectByRole(role);
+      navigate(redirectPath);
     } catch (err) {
-      setFormError(pickErrorMessage(err));
+      const message = pickApiDetail(err) || pickErrorMessage(err);
+      setFormError(message);
+
+      // Nếu backend trả token (dù login bị chặn vì chưa liên kết), lưu token để gọi my-invite-code.
+      const tokenFromError = pickToken(err?.response?.data);
+      if (tokenFromError) localStorage.setItem("access_token", tokenFromError);
+
+      setInviteInfo(null);
+      setInviteError("");
+
+      if (shouldFetchInviteOnLoginError(err)) {
+        try {
+          setInviteLoading(true);
+          const res = await ChildrenAPI.getInviteCode();
+          const payload = res?.data ?? res ?? {};
+          const code = String(payload?.inviteCode || "").trim();
+          setInviteInfo({
+            inviteCode: code,
+            expiresAt: payload?.expiresAt || "",
+            isExpired: Boolean(payload?.isExpired),
+            isLinked: Boolean(payload?.isLinked),
+          });
+          if (code) localStorage.setItem("inviteCode", code);
+        } catch (e2) {
+          const detail2 = pickApiDetail(e2);
+          const body2 = e2?.response?.data;
+          const apiErr2 = body2?.error;
+          setInviteError(
+            detail2 ||
+              apiErr2?.message ||
+              body2?.message ||
+              e2?.message ||
+              "Không lấy được mã mời.",
+          );
+        } finally {
+          setInviteLoading(false);
+        }
+      }
     } finally {
       setLoading(false);
     }
   };
 
+  const copyInvite = async () => {
+    const code = inviteInfo?.inviteCode;
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = code;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+  };
+
   const showEmailError = touched.email && errors.email;
   const showPasswordError = touched.password && errors.password;
-  const emailId = "login-email";
-  const passwordId = "login-password";
-  const emailErrId = "login-email-error";
-  const passwordErrId = "login-password-error";
 
   return (
     <div className="form-wrapper login-page">
+      {" "}
       <h1 className="title">
-        <span style={{ color: "#FBBF24" }}>ReadEase</span> chào mừng bạn!
+        <span style={{ color: "#FBBF24" }}>ReadEase</span> chào mừng bạn!{" "}
       </h1>
-
       <p className="subtitle subtitle--bold">
         Nơi việc học tập diễn ra theo tốc độ của con bạn.
       </p>
-
       <form className="login-form" onSubmit={handleSubmit} noValidate>
-        {formError ? (
+        {formError && (
           <p
             className="login-form__error login-form__error--global"
             role="alert"
           >
             {formError}
           </p>
+        )}
+
+        {inviteLoading ? (
+          <p className="login-form__error" role="status">
+            Đang lấy mã mời...
+          </p>
+        ) : null}
+
+        {!inviteLoading && inviteInfo?.inviteCode ? (
+          <div className="login-invite">
+            <div className="login-invite__row">
+              <span className="login-invite__label">Mã mời phụ huynh</span>
+              <button
+                type="button"
+                className="login-invite__copy"
+                onClick={copyInvite}
+              >
+                Copy mã
+              </button>
+            </div>
+            <div className="login-invite__code" aria-live="polite">
+              {inviteInfo.inviteCode}
+            </div>
+            {inviteInfo.expiresAt ? (
+              <p className="login-invite__meta">
+                Hết hạn: <strong>{String(inviteInfo.expiresAt)}</strong>
+                {inviteInfo.isExpired ? " (Đã hết hạn)" : ""}
+                {inviteInfo.isLinked ? " • Đã liên kết" : ""}
+              </p>
+            ) : null}
+          </div>
         ) : null}
 
         <div
           className={`input-group ${showEmailError ? "input-group--invalid" : ""}`}
         >
           <input
-            id={emailId}
             type="email"
-            name="email"
             placeholder="Email đăng nhập"
             value={email}
             onChange={handleEmailChange}
             onBlur={handleEmailBlur}
-            autoComplete="email"
-            aria-invalid={showEmailError ? "true" : "false"}
-            aria-describedby={showEmailError ? emailErrId : undefined}
           />
-          {showEmailError ? (
-            <p id={emailErrId} className="input-group__error" role="alert">
-              {errors.email}
-            </p>
-          ) : null}
+          {showEmailError && (
+            <p className="input-group__error">{errors.email}</p>
+          )}
         </div>
 
         <div
           className={`input-group ${showPasswordError ? "input-group--invalid" : ""}`}
         >
           <input
-            id={passwordId}
             type="password"
-            name="password"
             placeholder="Mật khẩu"
             value={password}
             onChange={handlePasswordChange}
             onBlur={handlePasswordBlur}
-            autoComplete="current-password"
-            aria-invalid={showPasswordError ? "true" : "false"}
-            aria-describedby={showPasswordError ? passwordErrId : undefined}
           />
-          {showPasswordError ? (
-            <p id={passwordErrId} className="input-group__error" role="alert">
-              {errors.password}
-            </p>
-          ) : null}
+          {showPasswordError && (
+            <p className="input-group__error">{errors.password}</p>
+          )}
         </div>
 
         <div className="forgot-password">
-          <a href="#forgot">Quên mật khẩu?</a>
+          <Link to="/forgot-password">Quên mật khẩu?</Link>
         </div>
 
         <button
@@ -218,8 +342,7 @@ const LoginPage = () => {
           {loading ? "Đang đăng nhập..." : "Đăng nhập"}
         </button>
       </form>
-
-      <p className="signup-link" style={{ fontWeight: "bold" }}>
+      <p className="signup-link">
         Bạn chưa có tài khoản? <Link to="/register">Đăng ký</Link>
       </p>
     </div>

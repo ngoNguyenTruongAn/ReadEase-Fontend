@@ -75,7 +75,18 @@ const VerifyEmailPage = () => {
       setLoading(true);
 
       // Gọi API xác thực
-      await AuthAPI.verifyOTPAPI(email, code);
+      const verifyRes = await AuthAPI.verifyOTPAPI(email, code);
+      const data = verifyRes?.data;
+
+      const accessToken = data?.accessToken;
+      const refreshToken = data?.refreshToken;
+      const inviteCode = data?.inviteCode;
+      const roleFromApi = data?.user?.role;
+
+      if (accessToken) localStorage.setItem("access_token", accessToken);
+      if (refreshToken) localStorage.setItem("refresh_token", refreshToken);
+      if (inviteCode) localStorage.setItem("inviteCode", inviteCode);
+      if (roleFromApi) localStorage.setItem("role", roleFromApi);
       sessionStorage.removeItem("registerPendingPassword");
 
       // --- LOGIC ĐIỀU HƯỚNG ---
@@ -85,7 +96,7 @@ const VerifyEmailPage = () => {
       }
       // Các trường hợp còn lại (Parent/Lecturer) -> Vào ChildrenLayout
       else {
-        navigate("/children");
+        navigate("/login");
       }
 
       // Sau khi điều hướng thành công, có thể xóa email/role tạm để bảo mật
@@ -176,9 +187,7 @@ const VerifyEmailPage = () => {
               <button
                 type="button"
                 className="validate-resend-btn"
-                disabled={
-                  !email.trim() || resendLoading || resendCooldown > 0
-                }
+                disabled={!email.trim() || resendLoading || resendCooldown > 0}
                 onClick={handleResend}
               >
                 {resendLoading
