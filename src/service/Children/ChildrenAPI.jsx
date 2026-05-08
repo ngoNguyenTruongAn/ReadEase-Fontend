@@ -43,7 +43,7 @@ const getRewardList = async () => {
   }
 };
 
-///doi phan thuong
+//doi phan thuong
 const redeemReward = async (rewardId, childId, expectedVersion) => {
   const payload = {
     childId,
@@ -58,10 +58,22 @@ const redeemReward = async (rewardId, childId, expectedVersion) => {
   }
 };
 
+//bo suu tap phan thuong
+const getCollection = async (childId) => {
+  try {
+    const response = await instance.get(`tokens/${childId}/collection`);
+    return response.data;
+  } catch (error) {
+    console.error("Error getting collection:", error);
+    throw error;
+  }
+};
+
 export default {
   getBalance,
   getConsumptionHistory,
   getRewardList,
   redeemReward,
   getInviteCode,
+  getCollection,
 };

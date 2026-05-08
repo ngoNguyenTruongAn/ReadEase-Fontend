@@ -762,6 +762,14 @@ const ChildrenLayout = () => {
                 >
                   Cửa hàng
                 </NavLink>
+                <NavLink
+                  to="/children/collection"
+                  className={({ isActive }) =>
+                    `children-nav-link ${isActive ? "is-active" : ""}`
+                  }
+                >
+                  Bộ sưu tập
+                </NavLink>
               </nav>
             </div>
 
@@ -788,6 +796,8 @@ const ChildrenLayout = () => {
               context={{
                 setSideStory,
                 resetSideStory: () => setSideStory(defaultSideStory),
+                balance,
+                setBalance,
               }}
             />
           </section>

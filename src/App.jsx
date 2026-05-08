@@ -7,6 +7,7 @@ import SelectRolePage from "./components/Login/RegisterPage/SelectRolePage/Selec
 import ChildrenLayout from "./components/Web/Children/ChildrenLayout";
 import LibararyPage from "./components/Web/Children/Library/LibararyPage";
 import StorePage from "./components/Web/Children/Store/StorePage";
+import CollectionPage from "./components/Web/Children/Collection/CollectionPage";
 import ProfileLayout from "./components/Web/Profile/ProfileLayout";
 import CalibrationStartPage from "./components/Web/Children/CalibrationStart/CalibrationStartPage";
 import ReadingPage from "./components/Web/Children/Reading/ReadingPage";
@@ -45,6 +46,7 @@ function App() {
           <Route path="/children/profile" element={<ProfileLayout />} />
           <Route path="/children/library" element={<LibararyPage />} />
           <Route path="/children/store" element={<StorePage />} />
+          <Route path="/children/collection" element={<CollectionPage />} />
         </Route>
 
         {/* standalone calibration */}
