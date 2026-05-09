@@ -69,6 +69,22 @@ const getCollection = async (childId) => {
   }
 };
 
+// cong tokens theo ket qua doc truyen (Dual Intervention)
+// NOTE: Endpoint/payload may need alignment with backend.
+const awardTokensForReadingSession = async (childId, payload) => {
+  if (!childId) {
+    throw new Error("childId is required to award tokens.");
+  }
+
+  try {
+    const response = await instance.post(`tokens/${childId}/award`, payload);
+    return response.data;
+  } catch (error) {
+    console.error("Error awarding tokens:", error);
+    throw error;
+  }
+};
+
 export default {
   getBalance,
   getConsumptionHistory,
@@ -76,4 +92,5 @@ export default {
   redeemReward,
   getInviteCode,
   getCollection,
+  awardTokensForReadingSession,
 };

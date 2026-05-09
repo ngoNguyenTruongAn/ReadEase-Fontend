@@ -1,14 +1,18 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import instance from "../../../../app/instance";
 import ContenAPI from "../../../../service/Contents/ContenAPI";
 import AuthAPI from "../../../../service/Auth/AuthAPI";
+import ChildrenAPI from "../../../../service/Children/ChildrenAPI";
 import ReadingAssistControls from "./components/ReadingAssistControls";
 import ReadingBookView from "./components/ReadingBookView";
 import ReadingPagination from "./components/ReadingPagination";
 import ReadingScorePanel from "./components/ReadingScorePanel";
 import useReadingDualInterventionSession from "./dualIntervention/hooks/useReadingDualInterventionSession";
-import { extractHybridVietnameseWordEntries } from "./dualIntervention/tokenization/hybridVietnameseSegmentation";
+import {
+  countHybridVietnameseWords,
+  extractHybridVietnameseWordEntries,
+} from "./dualIntervention/tokenization/hybridVietnameseSegmentation";
 import useHoverSpeech from "./hooks/useHoverSpeech";
 import {
   buildUnavailableStoryPayload,
@@ -21,6 +25,7 @@ import {
   STORY_FALLBACK,
 } from "./readingUtils";
 import "./ReadingPage.scss";
+import { toast } from "react-toastify";
 
 const CONTENT_AVAILABILITY_DEFAULT = {
   isUnavailable: false,
@@ -75,6 +80,127 @@ const resolveAdaptivePageCharLimit = (viewportWidth) => {
   return 300;
 };
 
+const createInitialReadingSessionMetrics = () => ({
+  startedAt: null,
+  endedAt: null,
+  trackingSessionId: "",
+  adaptationCounts: {
+    FLUENT: 0,
+    DISTRACTION: 0,
+    REGRESSION: 0,
+    OTHER: 0,
+    TOTAL: 0,
+  },
+  interventionWordHits: new Map(),
+});
+
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+const computeSessionSummary = ({
+  metrics,
+  wordOffsetByPage,
+  totalWords,
+}) => {
+  const startedAt = Number.isFinite(metrics?.startedAt) ? metrics.startedAt : null;
+  const endedAt = Number.isFinite(metrics?.endedAt) ? metrics.endedAt : null;
+  const durationMs =
+    startedAt !== null && endedAt !== null ? Math.max(0, endedAt - startedAt) : 0;
+
+  const counts = metrics?.adaptationCounts || {};
+  const distractionCount = Number(counts.DISTRACTION || 0) || 0;
+  const regressionCount = Number(counts.REGRESSION || 0) || 0;
+  const fluentCount = Number(counts.FLUENT || 0) || 0;
+
+  const safeTotalWords = Number.isFinite(totalWords) && totalWords > 0 ? totalWords : 0;
+  const durationMinutes = durationMs / 60000;
+  const safeMinutes = durationMinutes > 0 ? durationMinutes : 0;
+
+  const distractionPerMinute = safeMinutes > 0 ? distractionCount / safeMinutes : 0;
+  const regressionPerMinute = safeMinutes > 0 ? regressionCount / safeMinutes : 0;
+  const distractionPer100Words =
+    safeTotalWords > 0 ? (distractionCount / safeTotalWords) * 100 : 0;
+  const regressionPer100Words =
+    safeTotalWords > 0 ? (regressionCount / safeTotalWords) * 100 : 0;
+
+  let repeatedInterventionWords = 0;
+  let repeatedInterventionExtraHits = 0;
+  const hitMap = metrics?.interventionWordHits;
+  if (hitMap && typeof hitMap.forEach === "function") {
+    hitMap.forEach((count) => {
+      const n = Number(count) || 0;
+      if (n > 1) {
+        repeatedInterventionWords += 1;
+        repeatedInterventionExtraHits += n - 1;
+      }
+    });
+  }
+
+  return {
+    startedAt,
+    endedAt,
+    durationMs,
+    durationMinutes,
+    trackingSessionId: metrics?.trackingSessionId || "",
+    totalWords: safeTotalWords,
+    counts: {
+      fluent: fluentCount,
+      distraction: distractionCount,
+      regression: regressionCount,
+      total: Number(counts.TOTAL || 0) || 0,
+    },
+    rates: {
+      distractionPerMinute,
+      regressionPerMinute,
+      distractionPer100Words,
+      regressionPer100Words,
+    },
+    interventions: {
+      repeatedInterventionWords,
+      repeatedInterventionExtraHits,
+    },
+    debug: {
+      wordOffsetByPageCount: Array.isArray(wordOffsetByPage) ? wordOffsetByPage.length : 0,
+    },
+  };
+};
+
+const computeReadingTokens = (summary) => {
+  // NOTE: coefficients are intentionally conservative and easy to tune.
+  // If you want a different formula, adjust the constants below.
+  const BASE_COMPLETION_TOKENS = 10;
+  const TOKENS_PER_MINUTE = 2;
+  const MAX_TIME_TOKENS = 20;
+  const PENALTY_PER_DISTRACTION = 1;
+  const PENALTY_PER_REGRESSION = 2;
+  const PENALTY_PER_REPEAT_WORD = 1;
+  const MIN_TOKENS = 0;
+  const MAX_TOKENS = 100;
+
+  const minutes = Number(summary?.durationMinutes || 0) || 0;
+  const timeTokens = clamp(Math.floor(minutes * TOKENS_PER_MINUTE), 0, MAX_TIME_TOKENS);
+
+  const distraction = Number(summary?.counts?.distraction || 0) || 0;
+  const regression = Number(summary?.counts?.regression || 0) || 0;
+  const repeatWords = Number(summary?.interventions?.repeatedInterventionWords || 0) || 0;
+
+  const penalties =
+    distraction * PENALTY_PER_DISTRACTION +
+    regression * PENALTY_PER_REGRESSION +
+    repeatWords * PENALTY_PER_REPEAT_WORD;
+
+  const raw = BASE_COMPLETION_TOKENS + timeTokens - penalties;
+  const tokens = clamp(Math.round(raw), MIN_TOKENS, MAX_TOKENS);
+
+  return {
+    tokens,
+    breakdown: {
+      base: BASE_COMPLETION_TOKENS,
+      timeTokens,
+      penalties,
+    },
+  };
+};
+
 const ReadingPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -82,6 +208,9 @@ const ReadingPage = () => {
     () => location.state?.story ?? getSelectedStory(),
     [location.state],
   );
+
+  const [childId, setChildId] = useState("");
+  const [isFinishingSession, setIsFinishingSession] = useState(false);
 
   const [authStatus, setAuthStatus] = useState("checking");
   const [authDebug, setAuthDebug] = useState({
@@ -105,6 +234,13 @@ const ReadingPage = () => {
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth : 1200,
   );
+
+  const visitedPagesRef = useRef(new Set([0]));
+  const [visitedPagesCount, setVisitedPagesCount] = useState(1);
+  const currentPageRef = useRef(0);
+  const sessionMetricsRef = useRef(createInitialReadingSessionMetrics());
+  const finishInFlightRef = useRef(false);
+  const canExitSessionRef = useRef(false);
 
   const {
     handleHoverStart: handleHoverSpeechStart,
@@ -154,6 +290,10 @@ const ReadingPage = () => {
         if (!isMounted) return;
 
         const profile = normalizeProfilePayload(profilePayload);
+        const resolvedChildId = String(
+          profile?.id || profile?._id || profile?.user_id || "",
+        ).trim();
+        setChildId(resolvedChildId);
         setAvatarUrl(
           profile?.avatarUrl ||
             profile?.avatar ||
@@ -355,6 +495,14 @@ const ReadingPage = () => {
   }, [story.title]);
 
   useEffect(() => {
+    // Reset session tracking when the story changes.
+    visitedPagesRef.current = new Set([0]);
+    setVisitedPagesCount(1);
+    sessionMetricsRef.current = createInitialReadingSessionMetrics();
+    finishInFlightRef.current = false;
+  }, [story.title]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return undefined;
 
     const handleResize = () => {
@@ -417,6 +565,28 @@ const ReadingPage = () => {
     [pageWordEntries],
   );
 
+  const pageWordCounts = useMemo(() => {
+    const pages = Array.isArray(renderedStoryPages?.segmentedPages)
+      ? renderedStoryPages.segmentedPages
+      : [];
+    return pages.map((page) => countHybridVietnameseWords(page));
+  }, [renderedStoryPages?.segmentedPages]);
+
+  const wordOffsetByPage = useMemo(() => {
+    const offsets = [];
+    let running = 0;
+    pageWordCounts.forEach((count) => {
+      offsets.push(running);
+      running += Number(count) || 0;
+    });
+    return offsets;
+  }, [pageWordCounts]);
+
+  const totalWords = useMemo(
+    () => pageWordCounts.reduce((acc, value) => acc + (Number(value) || 0), 0),
+    [pageWordCounts],
+  );
+
   const {
     visualFlags,
     wordIntervention,
@@ -425,6 +595,7 @@ const ReadingPage = () => {
     handleStoryPointerMove,
     handleStoryPointerLeave,
     handleTooltipRendered,
+    endSession,
   } = useReadingDualInterventionSession({
     enabled:
       authStatus === "authenticated" && !isLoading && !isContentUnavailable && Boolean(pageText),
@@ -432,7 +603,233 @@ const ReadingPage = () => {
       story?.contentId ?? selectedStory?.id ?? selectedStory?._id ?? selectedStory?.storyId,
     apiBaseUrl: instance?.defaults?.baseURL,
     resolveTooltipByWordIndex,
+    onAdaptationState: useCallback(
+      (event) => {
+        if (!event) return;
+
+        const metrics = sessionMetricsRef.current;
+        if (metrics.startedAt === null) {
+          metrics.startedAt = Date.now();
+        }
+
+        if (event?.sessionId && !metrics.trackingSessionId) {
+          metrics.trackingSessionId = String(event.sessionId || "");
+        }
+
+        const state = String(event?.state || "").toUpperCase();
+        metrics.adaptationCounts.TOTAL += 1;
+        if (state === "FLUENT") metrics.adaptationCounts.FLUENT += 1;
+        else if (state === "DISTRACTION") metrics.adaptationCounts.DISTRACTION += 1;
+        else if (state === "REGRESSION") metrics.adaptationCounts.REGRESSION += 1;
+        else metrics.adaptationCounts.OTHER += 1;
+
+        // Track repeated word interventions for non-FLUENT states.
+        if (state !== "FLUENT") {
+          const wordIndex = event?.wordIndex;
+          const pageIndex = currentPageRef.current;
+          const offset = Number.isInteger(wordOffsetByPage?.[pageIndex])
+            ? wordOffsetByPage[pageIndex]
+            : null;
+
+          if (Number.isInteger(wordIndex) && wordIndex >= 0) {
+            const key = offset !== null ? String(offset + wordIndex) : `${pageIndex}:${wordIndex}`;
+            const previous = metrics.interventionWordHits.get(key) || 0;
+            metrics.interventionWordHits.set(key, previous + 1);
+          }
+        }
+      },
+      [wordOffsetByPage],
+    ),
   });
+
+  const isSessionActive =
+    authStatus === "authenticated" && !isLoading && !isContentUnavailable && Boolean(pageText);
+
+  useEffect(() => {
+    if (!isSessionActive) return;
+    const metrics = sessionMetricsRef.current;
+    if (metrics.startedAt === null) {
+      metrics.startedAt = Date.now();
+    }
+  }, [isSessionActive]);
+
+  useEffect(() => {
+    const sessionId = String(trackingDebug?.sessionId || "").trim();
+    if (!sessionId) return;
+    const metrics = sessionMetricsRef.current;
+    if (!metrics.trackingSessionId) {
+      metrics.trackingSessionId = sessionId;
+    }
+  }, [trackingDebug?.sessionId]);
+
+  useEffect(() => {
+    currentPageRef.current = safeCurrentPage;
+  }, [safeCurrentPage]);
+
+  useEffect(() => {
+    // Track page coverage for “must finish story before exit”.
+    const set = visitedPagesRef.current;
+    const beforeSize = set.size;
+    set.add(safeCurrentPage);
+    if (set.size !== beforeSize) {
+      setVisitedPagesCount(set.size);
+    }
+  }, [safeCurrentPage]);
+
+  const canExitSession = useMemo(() => {
+    if (isLoading) return false;
+    if (isContentUnavailable) return true;
+    const visitedAllPages = visitedPagesCount >= totalPages;
+    const isOnLastPage = safeCurrentPage >= totalPages - 1;
+    return visitedAllPages && isOnLastPage;
+  }, [isContentUnavailable, isLoading, safeCurrentPage, totalPages, visitedPagesCount]);
+
+  useEffect(() => {
+    canExitSessionRef.current = canExitSession;
+  }, [canExitSession]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const handleBeforeUnload = (event) => {
+      if (canExitSessionRef.current) return;
+
+      event.preventDefault();
+      // Most browsers ignore custom text, but returnValue is still required.
+      event.returnValue = "";
+      return "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const pushGuardState = () => {
+      try {
+        window.history.pushState({ readeaseReadingGuard: true }, "", window.location.href);
+      } catch {
+        // ignore
+      }
+    };
+
+    // Add an extra entry so the Back button doesn't leave immediately.
+    pushGuardState();
+
+    const handlePopState = () => {
+      if (canExitSessionRef.current) return;
+      pushGuardState();
+      toast.info("Bạn cần đọc hết truyện trước khi thoát phiên đọc.");
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
+
+  const handleExitSession = useCallback(async () => {
+    if (isContentUnavailable) {
+      try {
+        endSession?.();
+      } catch {
+        // ignore
+      }
+
+      navigate("/children/library", { replace: true });
+      return;
+    }
+
+    if (!canExitSession) {
+      toast.info("Bạn cần đọc hết truyện trước khi thoát phiên đọc.");
+      return;
+    }
+
+    if (finishInFlightRef.current) return;
+    finishInFlightRef.current = true;
+    setIsFinishingSession(true);
+
+    const metrics = sessionMetricsRef.current;
+    metrics.endedAt = Date.now();
+
+    const summary = computeSessionSummary({
+      metrics,
+      wordOffsetByPage,
+      totalWords,
+    });
+    const tokenResult = computeReadingTokens(summary);
+
+    try {
+      if (typeof window !== "undefined" && window.sessionStorage) {
+        window.sessionStorage.setItem(
+          "readease:reading:lastSession",
+          JSON.stringify({
+            kind: "reading-session",
+            childId,
+            contentId:
+              story?.contentId ?? selectedStory?.id ?? selectedStory?._id ?? selectedStory?.storyId,
+            summary,
+            tokenResult,
+            savedAt: Date.now(),
+          }),
+        );
+      }
+    } catch {
+      // ignore storage errors
+    }
+
+    try {
+      const awardFn = ChildrenAPI?.awardTokensForReadingSession;
+      const canAward = childId && typeof awardFn === "function";
+
+      if (!canAward) {
+        toast.warning(
+          "Đã hoàn thành phiên đọc, nhưng chưa lưu được tokens (thiếu childId hoặc endpoint).",
+        );
+      } else {
+        await awardFn(childId, {
+          amount: tokenResult.tokens,
+          sessionId: summary.trackingSessionId || undefined,
+          contentId:
+            story?.contentId ?? selectedStory?.id ?? selectedStory?._id ?? selectedStory?.storyId,
+          metrics: {
+            durationMs: summary.durationMs,
+            totalWords: summary.totalWords,
+            distraction: summary.counts.distraction,
+            regression: summary.counts.regression,
+            repeatedInterventionWords: summary.interventions.repeatedInterventionWords,
+          },
+        });
+        toast.success(`Hoàn thành phiên đọc! +${tokenResult.tokens} tokens`);
+      }
+    } catch (error) {
+      console.warn("Token award failed:", error);
+      toast.warning("Đã hoàn thành phiên đọc, nhưng chưa lưu được tokens.");
+    } finally {
+      try {
+        endSession?.();
+      } catch {
+        // ignore
+      }
+
+      setIsFinishingSession(false);
+      navigate("/children/library", { replace: true });
+    }
+  }, [
+    canExitSession,
+    childId,
+    endSession,
+    isContentUnavailable,
+    navigate,
+    selectedStory,
+    story?.contentId,
+    totalWords,
+    wordOffsetByPage,
+  ]);
 
   const shouldShowDebugPanel = useMemo(() => {
     const queryValue = new URLSearchParams(location.search).get("debugTracking");
@@ -464,7 +861,18 @@ const ReadingPage = () => {
     <div className="reading-page-shell">
       <div className="reading-page">
         <header className="reading-header">
-          <h1 className="reading-title">{story.title}</h1>
+          <div className="reading-header-row">
+            <h1 className="reading-title">{story.title}</h1>
+
+            <button
+              type="button"
+              className="reading-exit-btn"
+              onClick={handleExitSession}
+              disabled={!canExitSession || isFinishingSession}
+            >
+              {isFinishingSession ? "Đang lưu..." : "Thoát"}
+            </button>
+          </div>
         </header>
 
         {isLoading && <p className="reading-loading">Đang tải nội dung truyện...</p>}

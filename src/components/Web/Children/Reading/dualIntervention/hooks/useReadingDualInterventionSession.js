@@ -163,6 +163,7 @@ const useReadingDualInterventionSession = ({
   flushIntervalMs = DEFAULT_FLUSH_INTERVAL_MS,
   fluentTimeoutMs = DEFAULT_FLUENT_TIMEOUT_MS,
   resolveTooltipByWordIndex,
+  onAdaptationState,
 }) => {
   const socketRef = useRef(null);
   const pointBufferRef = useRef([]);
@@ -193,12 +194,17 @@ const useReadingDualInterventionSession = ({
   const lastAckedTooltipIdRef = useRef("");
   const currentWordIndexRef = useRef(null);
   const resolveTooltipByWordIndexRef = useRef(resolveTooltipByWordIndex);
+  const onAdaptationStateRef = useRef(onAdaptationState);
   const sessionIdRef = useRef("");
 
   const [visualFlags, setVisualFlags] = useState(INITIAL_VISUAL_FLAGS);
   const [wordIntervention, setWordIntervention] = useState(INITIAL_WORD_INTERVENTION);
   const [activeTooltip, setActiveTooltip] = useState(null);
   const [trackingDebug, setTrackingDebug] = useState(INITIAL_TRACKING_DEBUG);
+
+  useEffect(() => {
+    onAdaptationStateRef.current = onAdaptationState;
+  }, [onAdaptationState]);
 
   const markDebug = useCallback((patch) => {
     scheduleMicrotask(() => {
@@ -209,6 +215,27 @@ const useReadingDualInterventionSession = ({
       }));
     });
   }, []);
+
+  const emitAdaptationState = useCallback(
+    (payload, { source = "backend", reason = "" } = {}) => {
+      const callback = onAdaptationStateRef.current;
+      if (typeof callback !== "function") return;
+
+      try {
+        callback({
+          ...(payload || {}),
+          source,
+          reason: reason || "",
+          sessionId: sessionIdRef.current,
+          contentId: contentId ?? null,
+          timestamp: Date.now(),
+        });
+      } catch {
+        // ignore consumer errors
+      }
+    },
+    [contentId],
+  );
 
   const countOutbound = useCallback((eventName, metadata = {}) => {
     setTrackingDebug((previous) => {
@@ -422,23 +449,45 @@ const useReadingDualInterventionSession = ({
 
       localFallbackSignalRef.current.lastTriggeredAt = now;
 
+      const fallbackParams = {
+        letterSpacing: 0.094,
+        transitionMs: 130,
+        colorBandingStrength: 0.24,
+        invertedDeep: true,
+        invertedStrength: 0.9,
+        contrastBoost: 1.22,
+      };
+
       setVisualFlags(
         createVisualFlagsFromAdaptation({
           state: ADAPTATION_STATES.REGRESSION,
           mode: "DUAL_INTERVENTION",
           confidence: 0.88,
           params: {
-            letterSpacing: 0.094,
-            transitionMs: 130,
-            colorBandingStrength: 0.24,
-            invertedDeep: true,
-            invertedStrength: 0.9,
-            contrastBoost: 1.22,
+            ...fallbackParams,
           },
         }),
       );
 
       const resolvedWordIndex = Number.isInteger(wordIndex) && wordIndex >= 0 ? wordIndex : null;
+
+      emitAdaptationState(
+        {
+          state: ADAPTATION_STATES.REGRESSION,
+          mode: "DUAL_INTERVENTION",
+          adaptationType: "LOCAL_FALLBACK",
+          confidence: 0.88,
+          params: {
+            ...fallbackParams,
+          },
+          wordIndex: resolvedWordIndex,
+        },
+        {
+          source: "local-fallback",
+          reason: reason || "local-fallback",
+        },
+      );
+
       setWordIntervention((previous) => ({
         ...previous,
         distractionWordIndex: null,
@@ -457,7 +506,7 @@ const useReadingDualInterventionSession = ({
 
       armFluentTimer();
     },
-    [armFluentTimer],
+    [armFluentTimer, emitAdaptationState],
   );
 
   const evaluateRegressionFallbackByWordIndex = useCallback(
@@ -601,6 +650,8 @@ const useReadingDualInterventionSession = ({
     (payload) => {
       if (!payload) return;
 
+      emitAdaptationState(payload, { source: "backend" });
+
       if (payload.state === ADAPTATION_STATES.FLUENT) {
         resetFluentUi();
         clearFluentTimer();
@@ -663,7 +714,7 @@ const useReadingDualInterventionSession = ({
 
       armFluentTimer();
     },
-    [armFluentTimer, clearDistractionTimer, clearFluentTimer, resetFluentUi],
+    [armFluentTimer, clearDistractionTimer, clearFluentTimer, emitAdaptationState, resetFluentUi],
   );
 
   const isAdaptationBehaviorReady = useCallback((payload, timestamp = Date.now()) => {

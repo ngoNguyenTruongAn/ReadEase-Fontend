@@ -31,6 +31,41 @@
   max-width: 760px;
 }
 
+.reading-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.reading-exit-btn {
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: rgba($primary-color, 0.22);
+  color: $text-main;
+  font-size: 0.95rem;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    transform 0.16s ease,
+    background-color 0.18s ease,
+    opacity 0.18s ease;
+
+  &:hover:not(:disabled),
+  &:focus-visible:not(:disabled) {
+    background: rgba($primary-color, 0.34);
+    transform: translateY(-1px);
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+  }
+}
+
 .reading-title {
   margin: 0;
   font-size: clamp(1.35rem, 1.9vw, 2rem);
