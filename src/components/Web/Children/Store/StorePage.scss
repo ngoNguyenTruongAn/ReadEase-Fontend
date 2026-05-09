@@ -149,6 +149,8 @@ $store-border-active: $primary-color;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  // Đảm bảo tất cả card-wrap trong grid cùng chiều cao
+  min-height: 0;
 }
 
 .store-buy-btn {
@@ -186,6 +188,7 @@ $store-border-active: $primary-color;
   display: flex;
   flex-direction: column;
   align-items: center;
+  flex: 1;  // Card giãn đều trong wrap
   padding: 18px 14px 16px;
   border: 2px solid transparent;
   border-radius: 22px;
@@ -268,7 +271,8 @@ $store-border-active: $primary-color;
 
 .store-card-meta {
   width: 100%;
-  margin-top: 10px;
+  margin-top: auto; // Đẩy meta xuống đáy card — đều hàng dù có/không có stock
+  padding-top: 10px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -351,4 +355,203 @@ $store-border-active: $primary-color;
   .store-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+// ── Balance bar ──
+.store-balance-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(66, 211, 193, 0.15) 0%, rgba(66, 211, 193, 0.08) 100%);
+  border: 1.5px solid rgba(66, 211, 193, 0.35);
+}
+
+.store-balance-label {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: rgba($store-navy, 0.75);
+}
+
+.store-balance-amount {
+  font-size: 1.1rem;
+  font-weight: 900;
+  color: $store-navy;
+}
+
+// ── Toast types ──
+.store-toast--success {
+  background: rgba(56, 161, 105, 0.14);
+  border: 1px solid rgba(56, 161, 105, 0.4);
+  color: #276749;
+}
+
+.store-toast--error {
+  background: rgba(229, 62, 62, 0.12);
+  border: 1px solid rgba(229, 62, 62, 0.35);
+  color: #9b2c2c;
+}
+
+// ── Can't afford state ──
+.store-card--cant-afford {
+  opacity: 0.72;
+}
+
+.store-card-no-balance {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 165, 0, 0.18);
+  color: #7b4f00;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.store-buy-btn--disabled {
+  background: rgba(26, 43, 74, 0.05);
+  border-color: rgba(26, 43, 74, 0.18);
+  color: rgba($store-navy, 0.55);
+  font-size: 0.85rem;
+
+  &:hover {
+    transform: none;
+    box-shadow: none;
+    background: rgba(26, 43, 74, 0.05);
+  }
+}
+
+// ── Confirm Dialog ──
+.store-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 20, 45, 0.48);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+  animation: fadeIn 0.15s ease;
+}
+
+.store-confirm-dialog {
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 32px 28px 24px;
+  max-width: 340px;
+  width: 90%;
+  box-shadow: 0 24px 64px rgba(10, 20, 45, 0.2);
+  text-align: center;
+  animation: scaleIn 0.18s ease;
+}
+
+.store-confirm-art {
+  width: 100px;
+  height: 100px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e5faf6, #d4f5ef);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.store-confirm-img {
+  width: 80%;
+  height: 80%;
+  object-fit: contain;
+}
+
+.store-confirm-title {
+  margin: 0 0 6px;
+  font-size: 1.3rem;
+  font-weight: 900;
+  color: $store-navy;
+}
+
+.store-confirm-name {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: rgba($store-navy, 0.8);
+}
+
+.store-confirm-cost {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+  color: rgba($store-navy, 0.75);
+
+  strong {
+    color: $store-navy;
+    font-size: 1.05rem;
+  }
+}
+
+.store-confirm-after {
+  margin: 0 0 20px;
+  font-size: 0.88rem;
+  color: rgba($store-navy, 0.65);
+
+  strong {
+    font-size: 1rem;
+  }
+}
+
+.store-confirm-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.store-confirm-cancel {
+  flex: 1;
+  padding: 12px;
+  border-radius: 12px;
+  border: 2px solid rgba($store-navy, 0.18);
+  background: transparent;
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: rgba($store-navy, 0.7);
+  cursor: pointer;
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: rgba($store-navy, 0.06);
+  }
+}
+
+.store-confirm-ok {
+  flex: 1;
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  background: linear-gradient(135deg, #42d3c1, #2bb8a8);
+  color: #ffffff;
+  font-weight: 900;
+  font-size: 0.95rem;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(66, 211, 193, 0.4);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(66, 211, 193, 0.5);
+  }
+
+  &:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+    transform: none;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
 }
