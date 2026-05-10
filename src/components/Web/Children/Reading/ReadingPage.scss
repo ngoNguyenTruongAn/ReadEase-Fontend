@@ -388,6 +388,21 @@
   box-shadow: 0 0 0 2px rgba(#facc15, 0.36);
 }
 
+.reading-book-view.visual-inverted-deep .word-regression--mild {
+  text-decoration-color: rgba(#fde68a, 0.7);
+}
+
+// .word-regression--strong dark mode: no override needed — inherits intervention-target-word.
+
+.reading-book-view.visual-inverted-deep .word-regression--loop-focus {
+  background: rgba(#fbbf24, 0.3);
+  box-shadow: 0 0 0 2px rgba(#fbbf24, 0.5);
+}
+
+.reading-book-view.visual-inverted-deep .word-regression--loop-dim {
+  opacity: 0.2;
+}
+
 .reading-book-view.visual-inverted-deep .word-semantic-target {
   background: rgba(#bae6fd, 0.28);
 }
@@ -415,6 +430,44 @@
   background: rgba(#06b6d4, 0.2);
   border-radius: 7px;
   box-shadow: 0 0 0 2px rgba(#06b6d4, 0.14);
+}
+
+// --- Regression type modifiers ---
+// Applied alongside word-regression-focus / word-regression--strong etc.
+// Each type is additive and does not override existing intervention styles.
+
+// MILD: subtle underline only — non-distracting, signals "you passed here twice"
+.word-regression--mild {
+  text-decoration: underline;
+  text-decoration-color: rgba(#f59e0b, 0.55);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+  background: none;
+  box-shadow: none;
+  transition:
+    text-decoration-color 0.3s ease,
+    background 0.3s ease;
+}
+
+// STRONG: reuses intervention-target-word visual (bold + letter-spacing) applied
+// via JS — no extra background or color needed here, color-banding handles the line.
+
+// LOOP — focus word: elevated, visible
+.word-regression--loop-focus {
+  background: rgba(#f59e0b, 0.26);
+  border-radius: 7px;
+  box-shadow: 0 0 0 2px rgba(#f59e0b, 0.4);
+  font-weight: 700;
+  transition:
+    background 0.35s ease,
+    box-shadow 0.35s ease,
+    opacity 0.35s ease;
+}
+
+// LOOP — surrounding words: dimmed to reduce visual noise
+.word-regression--loop-dim {
+  opacity: 0.3;
+  transition: opacity 0.45s ease;
 }
 
 .word-semantic-target {

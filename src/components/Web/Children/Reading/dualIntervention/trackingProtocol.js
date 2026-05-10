@@ -203,3 +203,14 @@ export const createTooltipShownEvent = ({ tooltip, cognitiveState }) => ({
       : {}),
   },
 });
+
+export const createRegressionEvent = ({ regressionType, delta, confidence, wordIndex }) => ({
+  event: "reading:regression",
+  data: {
+    regressionType,   // "MILD" | "STRONG" | "LOOP" | "STALL"
+    delta,            // số từ lùi (âm)
+    confidence,       // 0–1
+    wordIndex,        // vùng bị regression
+    timestamp: Date.now(),
+  },
+});

@@ -84,6 +84,50 @@ const ReadingBookView = ({
     return map;
   }, [pageTokens]);
 
+  // Regression-specific derived state — does not affect any existing logic above.
+  const regressionType = wordIntervention?.regressionType ?? null;
+  const regressionWordIndex = wordIntervention?.regressionWordIndex ?? null;
+  const regressionFocusRadius = wordIntervention?.regressionFocusRadius ?? 0;
+
+  // For LOOP: set of wordIndexes that should be dimmed (everything outside the focus zone).
+  const regressionDimIndexSet = useMemo(() => {
+    if (regressionType !== "LOOP" || !Number.isInteger(regressionWordIndex)) {
+      return null;
+    }
+
+    const focusMin = regressionWordIndex - regressionFocusRadius;
+    const focusMax = regressionWordIndex + regressionFocusRadius;
+
+    const dimSet = new Set();
+    pageTokens.forEach((token) => {
+      if (token.type !== "word" || !Number.isInteger(token.wordIndex)) return;
+      if (token.wordIndex < focusMin || token.wordIndex > focusMax) {
+        dimSet.add(token.wordIndex);
+      }
+    });
+
+    return dimSet;
+  }, [regressionType, regressionWordIndex, regressionFocusRadius, pageTokens]);
+
+  // For STRONG: set of wordIndexes in the regression range to highlight as a block.
+  const regressionRangeIndexSet = useMemo(() => {
+    if (regressionType !== "STRONG" || !Number.isInteger(regressionWordIndex)) {
+      return null;
+    }
+
+    const rangeSet = new Set();
+    const rangeEnd = regressionWordIndex + regressionFocusRadius;
+
+    pageTokens.forEach((token) => {
+      if (token.type !== "word" || !Number.isInteger(token.wordIndex)) return;
+      if (token.wordIndex >= regressionWordIndex && token.wordIndex <= rangeEnd) {
+        rangeSet.add(token.wordIndex);
+      }
+    });
+
+    return rangeSet;
+  }, [regressionType, regressionWordIndex, regressionFocusRadius, pageTokens]);
+
   const interventionWordIndexes = useMemo(() => {
     const indexSet = new Set();
 
@@ -94,8 +138,21 @@ const ReadingBookView = ({
       }
     });
 
+    // STRONG/STALL: feed the full regression range so every word in the range
+    // gets picked up by bandedLineIndexSet → color banding fires on those lines
+    // exactly as it does for single-word interventions. No banding logic changes.
+    if (regressionRangeIndexSet) {
+      regressionRangeIndexSet.forEach((idx) => indexSet.add(idx));
+    }
+
+    // LOOP: only the focus word enters the set — surrounding words are dimmed,
+    // not highlighted, so they must stay out of interventionWordIndexes.
+    if (!regressionRangeIndexSet && Number.isInteger(regressionWordIndex) && regressionWordIndex >= 0) {
+      indexSet.add(regressionWordIndex);
+    }
+
     return Array.from(indexSet).sort((left, right) => left - right);
-  }, [wordIntervention]);
+  }, [wordIntervention, regressionRangeIndexSet, regressionWordIndex]);
 
   const interventionWordIndexSet = useMemo(
     () => new Set(interventionWordIndexes),
@@ -425,15 +482,31 @@ const ReadingBookView = ({
 
     const hoverText = hoverTextByWordIndex.get(wordIndex) || token.displayText || token.value;
 
+    const isRegressionLoopDim = regressionDimIndexSet?.has(wordIndex) ?? false;
+    const isRegressionStrongRange = regressionRangeIndexSet?.has(wordIndex) ?? false;
+    const isRegressionLoopFocus =
+      regressionType === "LOOP" && wordIndex === regressionWordIndex;
+
+    // STRONG/STALL range words reuse intervention-target-word (bold + letter-spacing)
+    // exactly like a single-word intervention — no new CSS needed.
+    const isRegressionInterventionWord = isRegressionStrongRange || isRegressionLoopFocus;
+
     const wordClassName = [
       "reading-word",
-      isInterventionTargetWord ? "intervention-target-word" : "",
+      isInterventionTargetWord || isRegressionInterventionWord ? "intervention-target-word" : "",
       isBandingLine ? "color-banding-active" : "",
       isBandingStart ? "line-banding-start" : "",
       isBandingEnd ? "line-banding-end" : "",
       wordIntervention?.distractionWordIndex === wordIndex ? "word-distract-hint" : "",
       wordIntervention?.regressionWordIndex === wordIndex ? "word-regression-focus" : "",
       wordIntervention?.semanticWordIndex === wordIndex ? "word-semantic-target" : "",
+      // Regression type modifiers — layered on top of word-regression-focus, no conflicts.
+      regressionType === "MILD" && wordIndex === regressionWordIndex
+        ? "word-regression--mild"
+        : "",
+      isRegressionStrongRange ? "word-regression--strong" : "",
+      isRegressionLoopFocus ? "word-regression--loop-focus" : "",
+      isRegressionLoopDim ? "word-regression--loop-dim" : "",
     ]
       .filter(Boolean)
       .join(" ");

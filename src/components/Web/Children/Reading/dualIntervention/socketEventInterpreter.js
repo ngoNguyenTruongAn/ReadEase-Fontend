@@ -198,6 +198,18 @@ export const interpretTrackingSocketEvent = ({ message, currentWordIndex }) => {
     };
   }
 
+  if (isEventIn(eventName, ["reading:regression", "regression:detected"])) {
+    return {
+      type: "regression",
+      payload: {
+        regressionType: toStringSafe(payload?.regressionType).toUpperCase() || "MILD",
+        delta: payload?.delta ?? 0,
+        confidence: payload?.confidence ?? 0.5,
+        wordIndex: resolveWordIndexFromPayload(payload, currentWordIndex),
+      },
+    };
+  }
+
   if (
     isEventIn(eventName, [
       "tooltip:show",

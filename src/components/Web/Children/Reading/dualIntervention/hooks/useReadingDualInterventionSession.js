@@ -94,11 +94,14 @@ const LOCAL_FALLBACK_COOLDOWN_MS = 3600;
 const LOCAL_FALLBACK_SIGNAL_RESET_MS = 5000;
 const LOCAL_FALLBACK_DWELL_MIN_MS = 3500;
 const LOCAL_FALLBACK_DWELL_POINTER_TOLERANCE_PX = 6;
+// DEV_TEST_MODE: hạ threshold để dễ trigger REGRESSION khi test thủ công.
+// Trước khi release, restore về: MIN_TOTAL_DELTA=2, MIN_EVENTS=2, MIN_DURATION_MS=3000, MAX_GAP_MS=1800
+const DEV_TEST_REGRESSION = import.meta.env.DEV;
 const LOCAL_FALLBACK_REGRESSION_MIN_STEP_DELTA = 1;
-const LOCAL_FALLBACK_REGRESSION_MIN_TOTAL_DELTA = 2;
-const LOCAL_FALLBACK_REGRESSION_MIN_EVENTS = 2;
-const LOCAL_FALLBACK_REGRESSION_MIN_DURATION_MS = 3000;
-const LOCAL_FALLBACK_REGRESSION_MAX_GAP_MS = 1800;
+const LOCAL_FALLBACK_REGRESSION_MIN_TOTAL_DELTA = DEV_TEST_REGRESSION ? 1 : 2;
+const LOCAL_FALLBACK_REGRESSION_MIN_EVENTS      = DEV_TEST_REGRESSION ? 1 : 2;
+const LOCAL_FALLBACK_REGRESSION_MIN_DURATION_MS = DEV_TEST_REGRESSION ? 800 : 3000;
+const LOCAL_FALLBACK_REGRESSION_MAX_GAP_MS      = DEV_TEST_REGRESSION ? 3000 : 1800;
 const LOCAL_FALLBACK_BEHAVIOR_READY_TTL_MS = 4000;
 
 const HANDSHAKE_VARIANTS = [
@@ -471,6 +474,20 @@ const useReadingDualInterventionSession = ({
 
       const resolvedWordIndex = Number.isInteger(wordIndex) && wordIndex >= 0 ? wordIndex : null;
 
+      // Local fallback thresholds (MIN_EVENTS >= 2, MIN_DURATION >= 3000ms, MIN_TOTAL_DELTA >= 2)
+      // guarantee at least STRONG by the time this fires. Classify LOOP if step count is high.
+      const signal = localFallbackSignalRef.current;
+      const backtrackDelta =
+        Number.isInteger(signal.regressionStartWordIndex) &&
+        Number.isInteger(signal.regressionLowestWordIndex)
+          ? signal.regressionStartWordIndex - signal.regressionLowestWordIndex
+          : 0;
+      const stepCount = signal.regressionStepCount ?? 0;
+
+      const localRegressionType = stepCount >= 4 ? "LOOP" : "STRONG";
+      const localFocusRadius =
+        localRegressionType === "LOOP" ? 3 : Math.max(1, backtrackDelta - 1);
+
       emitAdaptationState(
         {
           state: ADAPTATION_STATES.REGRESSION,
@@ -492,6 +509,8 @@ const useReadingDualInterventionSession = ({
         ...previous,
         distractionWordIndex: null,
         regressionWordIndex: resolvedWordIndex,
+        regressionType: localRegressionType,
+        regressionFocusRadius: localFocusRadius,
         semanticWordIndex: resolvedWordIndex,
       }));
 
@@ -685,14 +704,47 @@ const useReadingDualInterventionSession = ({
         }),
       );
 
-      setWordIntervention((previous) => ({
-        ...previous,
-        regressionWordIndex:
-          payload.state === ADAPTATION_STATES.REGRESSION ? payload.wordIndex : null,
-        distractionWordIndex:
-          payload.state === ADAPTATION_STATES.DISTRACTION ? payload.wordIndex : null,
-        semanticWordIndex: payload.state === ADAPTATION_STATES.REGRESSION ? payload.wordIndex : null,
-      }));
+      if (payload.state === ADAPTATION_STATES.REGRESSION) {
+        // BE only signals state:"REGRESSION" — classify subtype locally from the
+        // cursor signal that was already being tracked before BE responded.
+        const signal = localFallbackSignalRef.current;
+        const backtrackDelta =
+          Number.isInteger(signal.regressionStartWordIndex) &&
+          Number.isInteger(signal.regressionLowestWordIndex)
+            ? signal.regressionStartWordIndex - signal.regressionLowestWordIndex
+            : 0;
+        const stepCount = signal.regressionStepCount ?? 0;
+
+        const regressionType =
+          stepCount >= 4 ? "LOOP"
+          : backtrackDelta >= 4 ? "STRONG"
+          : backtrackDelta >= 2 ? "MILD"
+          : "MILD";
+
+        const regressionFocusRadius =
+          regressionType === "STRONG" ? Math.max(1, backtrackDelta - 1)
+          : regressionType === "LOOP" ? 3
+          : 0;
+
+        setWordIntervention((previous) => ({
+          ...previous,
+          regressionWordIndex: payload.wordIndex ?? null,
+          regressionType,
+          regressionFocusRadius,
+          distractionWordIndex: null,
+          semanticWordIndex: payload.wordIndex ?? null,
+        }));
+      } else {
+        setWordIntervention((previous) => ({
+          ...previous,
+          regressionWordIndex: null,
+          regressionType: null,
+          regressionFocusRadius: 0,
+          distractionWordIndex:
+            payload.state === ADAPTATION_STATES.DISTRACTION ? payload.wordIndex : null,
+          semanticWordIndex: null,
+        }));
+      }
 
       if (payload.state === ADAPTATION_STATES.DISTRACTION) {
         clearDistractionTimer();
