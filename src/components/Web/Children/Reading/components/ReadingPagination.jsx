@@ -1,9 +1,16 @@
 import React from "react";
 import { FaChevronCircleLeft, FaChevronCircleRight } from "react-icons/fa";
 
-const ReadingPagination = ({ currentPage, totalPages, onPrevPage, onNextPage }) => {
+const ReadingPagination = ({
+  currentPage,
+  totalPages,
+  onPrevPage,
+  onNextPage,
+  canGoNextOverride = true,
+  nextDisabledTitle = "",
+}) => {
   const canGoPrev = currentPage > 0;
-  const canGoNext = currentPage < totalPages - 1;
+  const canGoNext = currentPage < totalPages - 1 && canGoNextOverride;
 
   return (
     <footer className="reading-pagination" aria-label="Điều hướng trang đọc">
@@ -27,6 +34,7 @@ const ReadingPagination = ({ currentPage, totalPages, onPrevPage, onNextPage }) 
         onClick={onNextPage}
         disabled={!canGoNext}
         aria-label="Trang sau"
+        title={!canGoNext && nextDisabledTitle ? nextDisabledTitle : "Trang sau"}
       >
         <FaChevronCircleRight />
       </button>

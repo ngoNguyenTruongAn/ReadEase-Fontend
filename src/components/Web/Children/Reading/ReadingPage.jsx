@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import instance from "../../../../app/instance";
 import ContenAPI from "../../../../service/Contents/ContenAPI";
 import AuthAPI from "../../../../service/Auth/AuthAPI";
-import ChildrenAPI from "../../../../service/Children/ChildrenAPI";
 import ReadingAssistControls from "./components/ReadingAssistControls";
 import ReadingBookView from "./components/ReadingBookView";
 import ReadingPagination from "./components/ReadingPagination";
@@ -38,6 +37,13 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const isLikelyBackendContentId = (value) => UUID_PATTERN.test(String(value ?? "").trim());
+
+const toWordIndexOrNull = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  const rounded = Number.isInteger(parsed) ? parsed : Math.round(parsed);
+  return rounded >= 0 ? rounded : null;
+};
 
 const getStoredAccessToken = () =>
   localStorage.getItem("access_token") ||
@@ -93,8 +99,6 @@ const createInitialReadingSessionMetrics = () => ({
   },
   interventionWordHits: new Map(),
 });
-
-const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
 const computeSessionSummary = ({
   metrics,
@@ -164,43 +168,6 @@ const computeSessionSummary = ({
   };
 };
 
-const computeReadingTokens = (summary) => {
-  // NOTE: coefficients are intentionally conservative and easy to tune.
-  // If you want a different formula, adjust the constants below.
-  const BASE_COMPLETION_TOKENS = 10;
-  const TOKENS_PER_MINUTE = 2;
-  const MAX_TIME_TOKENS = 20;
-  const PENALTY_PER_DISTRACTION = 1;
-  const PENALTY_PER_REGRESSION = 2;
-  const PENALTY_PER_REPEAT_WORD = 1;
-  const MIN_TOKENS = 0;
-  const MAX_TOKENS = 100;
-
-  const minutes = Number(summary?.durationMinutes || 0) || 0;
-  const timeTokens = clamp(Math.floor(minutes * TOKENS_PER_MINUTE), 0, MAX_TIME_TOKENS);
-
-  const distraction = Number(summary?.counts?.distraction || 0) || 0;
-  const regression = Number(summary?.counts?.regression || 0) || 0;
-  const repeatWords = Number(summary?.interventions?.repeatedInterventionWords || 0) || 0;
-
-  const penalties =
-    distraction * PENALTY_PER_DISTRACTION +
-    regression * PENALTY_PER_REGRESSION +
-    repeatWords * PENALTY_PER_REPEAT_WORD;
-
-  const raw = BASE_COMPLETION_TOKENS + timeTokens - penalties;
-  const tokens = clamp(Math.round(raw), MIN_TOKENS, MAX_TOKENS);
-
-  return {
-    tokens,
-    breakdown: {
-      base: BASE_COMPLETION_TOKENS,
-      timeTokens,
-      penalties,
-    },
-  };
-};
-
 const ReadingPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -237,10 +204,30 @@ const ReadingPage = () => {
 
   const visitedPagesRef = useRef(new Set([0]));
   const [visitedPagesCount, setVisitedPagesCount] = useState(1);
+  const [completedPageIndexes, setCompletedPageIndexes] = useState(() => new Set());
+  const [hasReachedStoryEndCursor, setHasReachedStoryEndCursor] = useState(false);
   const currentPageRef = useRef(0);
   const sessionMetricsRef = useRef(createInitialReadingSessionMetrics());
   const finishInFlightRef = useRef(false);
   const canExitSessionRef = useRef(false);
+  const storyEndCursorReachedRef = useRef(false);
+
+  /**
+   * Tracks sequential reading progress per page.
+   *
+   * maxWordIndexSeen  – highest word index the cursor has visited on this page
+   *                     (never decreases; regression doesn’t lose progress).
+   * expectedNextIndex – the minimum word index the cursor must reach next to
+   *                     count as a continuous forward sweep. Resets on page change.
+   *
+   * A page is “completed” only when the cursor has swept words 0 → lastWord
+   * without skipping any word — every word must be hovered in order.
+   */
+  const pageReadProgressRef = useRef({ maxWordIndexSeen: -1, expectedNextIndex: 0 });
+
+
+
+  // Zero tolerance: the cursor must pass over every word in sequence.
 
   const {
     handleHoverStart: handleHoverSpeechStart,
@@ -498,6 +485,9 @@ const ReadingPage = () => {
     // Reset session tracking when the story changes.
     visitedPagesRef.current = new Set([0]);
     setVisitedPagesCount(1);
+    setCompletedPageIndexes(new Set());
+    storyEndCursorReachedRef.current = false;
+    setHasReachedStoryEndCursor(false);
     sessionMetricsRef.current = createInitialReadingSessionMetrics();
     finishInFlightRef.current = false;
   }, [story.title]);
@@ -586,6 +576,18 @@ const ReadingPage = () => {
     () => pageWordCounts.reduce((acc, value) => acc + (Number(value) || 0), 0),
     [pageWordCounts],
   );
+  const pageLastWordIndexByPage = useMemo(
+    () =>
+      pageWordCounts.map((count) => {
+        const normalizedCount = Number(count) || 0;
+        return normalizedCount > 0 ? normalizedCount - 1 : -1;
+      }),
+    [pageWordCounts],
+  );
+  const currentPageLastWordIndex = pageLastWordIndexByPage[safeCurrentPage] ?? -1;
+  const lastPageIndex = Math.max(totalPages - 1, 0);
+  const lastPageLastWordIndex = pageLastWordIndexByPage[lastPageIndex] ?? -1;
+  const requiresCursorCompletion = !isContentUnavailable && lastPageLastWordIndex >= 0;
 
   const {
     visualFlags,
@@ -664,6 +666,8 @@ const ReadingPage = () => {
 
   useEffect(() => {
     currentPageRef.current = safeCurrentPage;
+    // Reset sequential-read progress whenever the reader moves to a different page.
+    pageReadProgressRef.current = { maxWordIndexSeen: -1, expectedNextIndex: 0 };
   }, [safeCurrentPage]);
 
   useEffect(() => {
@@ -676,13 +680,118 @@ const ReadingPage = () => {
     }
   }, [safeCurrentPage]);
 
+  useEffect(() => {
+    if (isContentUnavailable) return;
+    if (storyEndCursorReachedRef.current) return;
+
+    const isOnLastPage = safeCurrentPage >= totalPages - 1;
+    if (!isOnLastPage) return;
+    if (lastPageLastWordIndex >= 0) return;
+
+    storyEndCursorReachedRef.current = true;
+    setHasReachedStoryEndCursor(true);
+  }, [isContentUnavailable, lastPageLastWordIndex, safeCurrentPage, totalPages]);
+
+  const handleReadingPointerMove = useCallback(
+    (event) => {
+      const wordElement = event?.target?.closest?.("[data-word-index]");
+      const resolvedWordIndex = toWordIndexOrNull(
+        wordElement?.getAttribute?.("data-word-index"),
+      );
+
+      if (resolvedWordIndex !== null && currentPageLastWordIndex >= 0) {
+        const progress = pageReadProgressRef.current;
+
+        // Strict sequential rule: only the exact next expected word advances
+        // the frontier. Hovering the same word twice or moving backward is
+        // ignored (no credit lost, no credit gained).
+        if (resolvedWordIndex === progress.expectedNextIndex) {
+          progress.maxWordIndexSeen = resolvedWordIndex;
+          progress.expectedNextIndex = resolvedWordIndex + 1;
+        }
+        // Any forward jump larger than 1 word leaves expectedNextIndex in place.
+        // The child must come back and hover each skipped word before progressing.
+
+        // Page is complete once every word up to the last has been hovered.
+        const hasSweptToEnd = progress.maxWordIndexSeen >= currentPageLastWordIndex;
+        if (hasSweptToEnd) {
+          setCompletedPageIndexes((prev) => {
+            if (prev.has(safeCurrentPage)) return prev;
+            const next = new Set(prev);
+            next.add(safeCurrentPage);
+            return next;
+          });
+        }
+
+        // Track story-end cursor for the session exit gate (last page only).
+        if (!storyEndCursorReachedRef.current && safeCurrentPage >= totalPages - 1) {
+          if (hasSweptToEnd && progress.maxWordIndexSeen >= lastPageLastWordIndex) {
+            storyEndCursorReachedRef.current = true;
+            setHasReachedStoryEndCursor(true);
+          }
+        }
+      }
+
+      handleStoryPointerMove?.(event);
+    },
+    [
+      currentPageLastWordIndex,
+      handleStoryPointerMove,
+      lastPageLastWordIndex,
+      safeCurrentPage,
+      totalPages,
+    ],
+  );
+
+  // A page is "read" once the cursor has hovered every word in order,
+  // without skipping any. Backward movement is ignored (no progress lost).
+  const isCurrentPageCompleted = completedPageIndexes.has(safeCurrentPage);
+  const canGoNextPage =
+    isContentUnavailable ||
+    safeCurrentPage >= totalPages - 1 ||
+    isCurrentPageCompleted ||
+    currentPageLastWordIndex < 0; // page has no trackable words — allow freely
+  const nextPageBlockedMessage = canGoNextPage
+    ? ""
+    : "Hãy đọc hết trang trước khi sang trang tiếp theo.";
+
   const canExitSession = useMemo(() => {
     if (isLoading) return false;
     if (isContentUnavailable) return true;
     const visitedAllPages = visitedPagesCount >= totalPages;
     const isOnLastPage = safeCurrentPage >= totalPages - 1;
-    return visitedAllPages && isOnLastPage;
-  }, [isContentUnavailable, isLoading, safeCurrentPage, totalPages, visitedPagesCount]);
+    const hasReachedLastWord = !requiresCursorCompletion || hasReachedStoryEndCursor;
+    return visitedAllPages && isOnLastPage && hasReachedLastWord;
+  }, [
+    hasReachedStoryEndCursor,
+    isContentUnavailable,
+    isLoading,
+    requiresCursorCompletion,
+    safeCurrentPage,
+    totalPages,
+    visitedPagesCount,
+  ]);
+
+  const exitBlockedMessage = useMemo(() => {
+    const visitedAllPages = visitedPagesCount >= totalPages;
+    const isOnLastPage = safeCurrentPage >= totalPages - 1;
+
+    if (!visitedAllPages || !isOnLastPage) {
+      return "Bạn cần đọc hết truyện trước khi hoàn thành phiên đọc.";
+    }
+
+    if (requiresCursorCompletion && !hasReachedStoryEndCursor) {
+      return "Hãy di chuyển con trỏ tới chữ cuối cùng ở trang cuối để xác nhận đã đọc xong.";
+    }
+
+    return "Bạn cần đọc hết truyện trước khi hoàn thành phiên đọc.";
+  }, [
+    hasReachedStoryEndCursor,
+    requiresCursorCompletion,
+    safeCurrentPage,
+    totalPages,
+    visitedPagesCount,
+  ]);
 
   useEffect(() => {
     canExitSessionRef.current = canExitSession;
@@ -723,14 +832,14 @@ const ReadingPage = () => {
     const handlePopState = () => {
       if (canExitSessionRef.current) return;
       pushGuardState();
-      toast.info("Bạn cần đọc hết truyện trước khi thoát phiên đọc.");
+      toast.info(exitBlockedMessage);
     };
 
     window.addEventListener("popstate", handlePopState);
     return () => {
       window.removeEventListener("popstate", handlePopState);
     };
-  }, []);
+  }, [exitBlockedMessage]);
 
   const handleExitSession = useCallback(async () => {
     if (isContentUnavailable) {
@@ -745,7 +854,7 @@ const ReadingPage = () => {
     }
 
     if (!canExitSession) {
-      toast.info("Bạn cần đọc hết truyện trước khi thoát phiên đọc.");
+      toast.info(exitBlockedMessage);
       return;
     }
 
@@ -761,7 +870,6 @@ const ReadingPage = () => {
       wordOffsetByPage,
       totalWords,
     });
-    const tokenResult = computeReadingTokens(summary);
 
     try {
       if (typeof window !== "undefined" && window.sessionStorage) {
@@ -773,7 +881,6 @@ const ReadingPage = () => {
             contentId:
               story?.contentId ?? selectedStory?.id ?? selectedStory?._id ?? selectedStory?.storyId,
             summary,
-            tokenResult,
             savedAt: Date.now(),
           }),
         );
@@ -782,43 +889,16 @@ const ReadingPage = () => {
       // ignore storage errors
     }
 
+    toast.success("Hoàn thành phiên đọc!");
+
     try {
-      const awardFn = ChildrenAPI?.awardTokensForReadingSession;
-      const canAward = childId && typeof awardFn === "function";
-
-      if (!canAward) {
-        toast.warning(
-          "Đã hoàn thành phiên đọc, nhưng chưa lưu được tokens (thiếu childId hoặc endpoint).",
-        );
-      } else {
-        await awardFn(childId, {
-          amount: tokenResult.tokens,
-          sessionId: summary.trackingSessionId || undefined,
-          contentId:
-            story?.contentId ?? selectedStory?.id ?? selectedStory?._id ?? selectedStory?.storyId,
-          metrics: {
-            durationMs: summary.durationMs,
-            totalWords: summary.totalWords,
-            distraction: summary.counts.distraction,
-            regression: summary.counts.regression,
-            repeatedInterventionWords: summary.interventions.repeatedInterventionWords,
-          },
-        });
-        toast.success(`Hoàn thành phiên đọc! +${tokenResult.tokens} tokens`);
-      }
-    } catch (error) {
-      console.warn("Token award failed:", error);
-      toast.warning("Đã hoàn thành phiên đọc, nhưng chưa lưu được tokens.");
-    } finally {
-      try {
-        endSession?.();
-      } catch {
-        // ignore
-      }
-
-      setIsFinishingSession(false);
-      navigate("/children/library", { replace: true });
+      endSession?.();
+    } catch {
+      // ignore
     }
+
+    setIsFinishingSession(false);
+    navigate("/children/library", { replace: true });
   }, [
     canExitSession,
     childId,
@@ -829,6 +909,7 @@ const ReadingPage = () => {
     story?.contentId,
     totalWords,
     wordOffsetByPage,
+    exitBlockedMessage,
   ]);
 
   const shouldShowDebugPanel = useMemo(() => {
@@ -869,8 +950,11 @@ const ReadingPage = () => {
               className="reading-exit-btn"
               onClick={handleExitSession}
               disabled={!canExitSession || isFinishingSession}
+              title={
+                !canExitSession && !isFinishingSession ? exitBlockedMessage : "Hoàn thành phiên đọc"
+              }
             >
-              {isFinishingSession ? "Đang lưu..." : "Thoát"}
+              {isFinishingSession ? "Đang lưu..." : "Hoàn thành"}
             </button>
           </div>
         </header>
@@ -915,7 +999,7 @@ const ReadingPage = () => {
                 activeTooltip={activeTooltip}
                 onWordHoverStart={handleHoverSpeechStart}
                 onWordHoverEnd={handleHoverSpeechEnd}
-                onStoryPointerMove={handleStoryPointerMove}
+                onStoryPointerMove={handleReadingPointerMove}
                 onStoryPointerLeave={handleStoryPointerLeave}
                 onTooltipRendered={handleTooltipRendered}
               />
@@ -928,6 +1012,8 @@ const ReadingPage = () => {
               totalPages={totalPages}
               onPrevPage={() => setCurrentPage((prev) => Math.max(prev - 1, 0))}
               onNextPage={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages - 1))}
+              canGoNextOverride={canGoNextPage}
+              nextDisabledTitle={nextPageBlockedMessage}
             />
           </>
         )}

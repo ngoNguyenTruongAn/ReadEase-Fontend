@@ -26,6 +26,71 @@ export const getSelectedStory = () => {
 
 const toStringSafe = (value) => String(value ?? "").trim();
 
+/**
+ * Split a paragraph into sentence-boundary-respecting chunks that fit within
+ * maxCharsPerPage.
+ *
+ * Strategy:
+ *   1. Split the paragraph into sentences using Vietnamese-aware sentence
+ *      terminators (. ! ? … :) followed by a space or end-of-string.
+ *   2. Greedily pack sentences into chunks.
+ *   3. Only fall back to word-level splitting when a single sentence is itself
+ *      longer than maxCharsPerPage (extremely rare in children's stories).
+ */
+const splitParagraphIntoChunks = (paragraph, maxCharsPerPage) => {
+  // Split on sentence-ending punctuation followed by whitespace or EOS,
+  // keeping the terminator attached to the preceding sentence.
+  const sentencePattern = /(?<=[.!?…:])(?=\s+\S|\s*$)/g;
+  const rawSentences = paragraph
+    .split(sentencePattern)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const chunks = [];
+  let current = "";
+
+  for (const sentence of rawSentences) {
+    const candidate = current ? `${current} ${sentence}` : sentence;
+
+    if (candidate.length <= maxCharsPerPage) {
+      current = candidate;
+      continue;
+    }
+
+    // Flush current chunk before starting a new one.
+    if (current) {
+      chunks.push(current);
+      current = "";
+    }
+
+    // The sentence fits on its own — start a new chunk with it.
+    if (sentence.length <= maxCharsPerPage) {
+      current = sentence;
+      continue;
+    }
+
+    // Sentence is longer than a full page — fall back to word-level splitting.
+    const words = sentence.split(/\s+/);
+    let wordChunk = "";
+
+    for (const word of words) {
+      const wordCandidate = wordChunk ? `${wordChunk} ${word}` : word;
+      if (wordCandidate.length <= maxCharsPerPage) {
+        wordChunk = wordCandidate;
+      } else {
+        if (wordChunk) chunks.push(wordChunk);
+        wordChunk = word;
+      }
+    }
+
+    if (wordChunk) current = wordChunk;
+  }
+
+  if (current) chunks.push(current);
+
+  return chunks;
+};
+
 export const splitIntoPages = (rawText, maxCharsPerPage = 420) => {
   const normalized = toStringSafe(rawText).replace(/\r/g, "").trim();
   if (!normalized) {
@@ -44,16 +109,17 @@ export const splitIntoPages = (rawText, maxCharsPerPage = 420) => {
   const pages = [];
   let currentPage = "";
 
-  paragraphs.forEach((paragraph) => {
-    const nextBlock = currentPage
-      ? `${currentPage}\n\n${paragraph}`
-      : paragraph;
+  for (const paragraph of paragraphs) {
+    // Try to append the whole paragraph to the current page first.
+    const nextBlock = currentPage ? `${currentPage}\n\n${paragraph}` : paragraph;
 
     if (nextBlock.length <= maxCharsPerPage) {
       currentPage = nextBlock;
-      return;
+      continue;
     }
 
+    // The paragraph doesn't fit as a whole — flush the current page and then
+    // try to add just this paragraph.
     if (currentPage) {
       pages.push(currentPage);
       currentPage = "";
@@ -61,26 +127,18 @@ export const splitIntoPages = (rawText, maxCharsPerPage = 420) => {
 
     if (paragraph.length <= maxCharsPerPage) {
       currentPage = paragraph;
-      return;
+      continue;
     }
 
-    const words = paragraph.split(/\s+/);
-    let chunk = "";
+    // Paragraph is too long for one page — split it at sentence boundaries.
+    const chunks = splitParagraphIntoChunks(paragraph, maxCharsPerPage);
 
-    words.forEach((word) => {
-      const candidate = chunk ? `${chunk} ${word}` : word;
-      if (candidate.length <= maxCharsPerPage) {
-        chunk = candidate;
-      } else {
-        if (chunk) pages.push(chunk);
-        chunk = word;
-      }
-    });
-
-    if (chunk) {
-      currentPage = chunk;
+    for (let i = 0; i < chunks.length - 1; i++) {
+      pages.push(chunks[i]);
     }
-  });
+    // Hold the last chunk so subsequent paragraphs can be appended to it.
+    currentPage = chunks[chunks.length - 1] ?? "";
+  }
 
   if (currentPage) pages.push(currentPage);
 
