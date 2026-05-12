@@ -217,19 +217,20 @@ const ReadingPage = () => {
   /**
    * Tracks sequential reading progress per page.
    *
-   * maxWordIndexSeen  – highest word index the cursor has visited on this page
-   *                     (never decreases; regression doesn’t lose progress).
-   * expectedNextIndex – the minimum word index the cursor must reach next to
-   *                     count as a continuous forward sweep. Resets on page change.
+   * maxWordIndexSeen  – highest [data-word-index] reached this page (never decreases).
+   * expectedNextIndex – the minimum index we must see next to keep the sweep valid.
    *
-   * A page is “completed” only when the cursor has swept words 0 → lastWord
-   * without skipping any word — every word must be hovered in order.
+   * Rule: the cursor must sweep forward over every word in reading order.
+   * Natural pointer-event gaps (di chuột nhanh) are tolerated up to
+   * MAX_NATURAL_SKIP words per event. Jumps larger than that stall progress
+   * until the child comes back to fill the gap.
    */
   const pageReadProgressRef = useRef({ maxWordIndexSeen: -1, expectedNextIndex: 0 });
 
-
-
-  // Zero tolerance: the cursor must pass over every word in sequence.
+  // How many consecutive words a single pointer-move event may skip and still
+  // count as a natural forward sweep (compensates for sparse mousemove firing).
+  // 3 is conservative: covers normal fast-reading speed while blocking big jumps.
+  const MAX_NATURAL_SKIP = 3;
 
   const {
     handleHoverStart: handleHoverSpeechStart,
@@ -704,19 +705,21 @@ const ReadingPage = () => {
       if (resolvedWordIndex !== null && currentPageLastWordIndex >= 0) {
         const progress = pageReadProgressRef.current;
 
-        // Strict sequential rule: only the exact next expected word advances
-        // the frontier. Hovering the same word twice or moving backward is
-        // ignored (no credit lost, no credit gained).
-        if (resolvedWordIndex === progress.expectedNextIndex) {
+        // Accept this word if it is the exact next expected word OR within
+        // the natural-skip budget (compensates for sparse pointermove events
+        // during normal reading speed). Backward movement is silently ignored.
+        const gapToNext = resolvedWordIndex - progress.expectedNextIndex;
+        const isForwardAndClose = gapToNext >= 0 && gapToNext <= MAX_NATURAL_SKIP;
+
+        if (isForwardAndClose) {
           progress.maxWordIndexSeen = resolvedWordIndex;
           progress.expectedNextIndex = resolvedWordIndex + 1;
         }
-        // Any forward jump larger than 1 word leaves expectedNextIndex in place.
-        // The child must come back and hover each skipped word before progressing.
+        // Jumps larger than MAX_NATURAL_SKIP leave expectedNextIndex in place.
+        // The child must come back and cover the skipped region first.
 
-        // Page is complete once every word up to the last has been hovered.
-        const hasSweptToEnd = progress.maxWordIndexSeen >= currentPageLastWordIndex;
-        if (hasSweptToEnd) {
+        // Page is complete once the continuous sweep has reached the last word.
+        if (progress.maxWordIndexSeen >= currentPageLastWordIndex) {
           setCompletedPageIndexes((prev) => {
             if (prev.has(safeCurrentPage)) return prev;
             const next = new Set(prev);
@@ -727,7 +730,7 @@ const ReadingPage = () => {
 
         // Track story-end cursor for the session exit gate (last page only).
         if (!storyEndCursorReachedRef.current && safeCurrentPage >= totalPages - 1) {
-          if (hasSweptToEnd && progress.maxWordIndexSeen >= lastPageLastWordIndex) {
+          if (progress.maxWordIndexSeen >= lastPageLastWordIndex) {
             storyEndCursorReachedRef.current = true;
             setHasReachedStoryEndCursor(true);
           }

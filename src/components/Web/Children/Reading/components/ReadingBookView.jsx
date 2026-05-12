@@ -13,16 +13,73 @@ const INTERVENTION_WORD_INDEX_KEYS = [
 
 const LINE_DETECTION_TOLERANCE_PX = 14;
 
+// Khởi tạo 1 lần ở module scope để tránh chi phí new Intl.Segmenter() mỗi lần render.
+// Fallback về spread [...str] nếu môi trường không hỗ trợ Intl.Segmenter —
+// spread tách đúng surrogate pairs dù không xử lý dấu tổ hợp NFD,
+// nhưng vẫn an toàn hơn .split("").
+const VI_GRAPHEME_SEGMENTER =
+  typeof Intl !== "undefined" && typeof Intl.Segmenter === "function"
+    ? new Intl.Segmenter("vi", { granularity: "grapheme" })
+    : null;
+
+const getGraphemes = (str) => {
+  if (VI_GRAPHEME_SEGMENTER) {
+    return [...VI_GRAPHEME_SEGMENTER.segment(str)].map((s) => s.segment);
+  }
+  return [...str];
+};
+
+// Áp dụng bionic cho 1 âm tiết đơn (không chứa space).
+// Normalize NFC bắt buộc vì pipeline segmentation không normalize —
+// nếu backend trả NFD thì .slice() thô sẽ cắt giữa tổ hợp dấu.
+const applyBionicToSyllable = (syllable) => {
+  const normalized = syllable.normalize("NFC");
+  const graphemes = getGraphemes(normalized);
+
+  // Từ đơn âm ngắn ≤3 grapheme (bò, đi, xe...): chỉ bold 1 grapheme đầu.
+  // Từ dài hơn: bold 45% — phù hợp hơn 50% gốc cho tiếng Việt có thanh điệu.
+  const boldCount =
+    graphemes.length <= 3
+      ? 1
+      : Math.max(1, Math.ceil(graphemes.length * 0.45));
+
+  return {
+    bold: graphemes.slice(0, boldCount).join(""),
+    rest: graphemes.slice(boldCount).join(""),
+  };
+};
+
 const renderWordPiece = ({ token, useBionic }) => {
   if (!useBionic) {
     return token;
   }
 
-  const focusLength = Math.max(1, Math.ceil(token.length * 0.45));
+  // displayText của từ ghép segmented (học_sinh → "học sinh") chứa space ở giữa.
+  // Áp bionic riêng từng âm tiết để tránh bold cả space và tính sai grapheme count.
+  const syllables = token.split(" ");
+
+  if (syllables.length > 1) {
+    return (
+      <>
+        {syllables.map((syllable, index) => {
+          const { bold, rest } = applyBionicToSyllable(syllable);
+          return (
+            <React.Fragment key={index}>
+              {index > 0 && " "}
+              <strong>{bold}</strong>
+              {rest}
+            </React.Fragment>
+          );
+        })}
+      </>
+    );
+  }
+
+  const { bold, rest } = applyBionicToSyllable(token);
   return (
     <>
-      <strong>{token.slice(0, focusLength)}</strong>
-      {token.slice(focusLength)}
+      <strong>{bold}</strong>
+      {rest}
     </>
   );
 };
