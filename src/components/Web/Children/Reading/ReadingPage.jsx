@@ -25,6 +25,7 @@ import {
 } from "./readingUtils";
 import "./ReadingPage.scss";
 import { toast } from "react-toastify";
+import ReadingCompletionModal from "./ReadingCompletionModal";
 
 const CONTENT_AVAILABILITY_DEFAULT = {
   isUnavailable: false,
@@ -178,6 +179,7 @@ const ReadingPage = () => {
 
   const [childId, setChildId] = useState("");
   const [isFinishingSession, setIsFinishingSession] = useState(false);
+  const [completionData, setCompletionData] = useState(null); // { readingMinutes, focusPercent }
 
   const [authStatus, setAuthStatus] = useState("checking");
   const [authDebug, setAuthDebug] = useState({
@@ -889,7 +891,19 @@ const ReadingPage = () => {
       // ignore storage errors
     }
 
-    toast.success("Hoàn thành phiên đọc!");
+    const readingMinutes = summary.durationMinutes;
+    const focusPercent = (() => {
+      const totalMs = summary.durationMs;
+      if (totalMs <= 0) return 100;
+
+      const badEvents = summary.counts.distraction + summary.counts.regression;
+      // Moi bad event phat 1% cho moi phut doc
+      const penaltyPerEvent = Math.max(1, Math.round(60000 / totalMs));
+      const totalPenalty = Math.min(badEvents * penaltyPerEvent, 50);
+
+      // San 50% de tranh hien thi ket qua qua thap gay nan cho tre
+      return Math.max(50, 100 - totalPenalty);
+    })();
 
     try {
       endSession?.();
@@ -898,13 +912,12 @@ const ReadingPage = () => {
     }
 
     setIsFinishingSession(false);
-    navigate("/children/library", { replace: true });
+    setCompletionData({ readingMinutes, focusPercent });
   }, [
     canExitSession,
     childId,
     endSession,
     isContentUnavailable,
-    navigate,
     selectedStory,
     story?.contentId,
     totalWords,
@@ -1088,6 +1101,16 @@ const ReadingPage = () => {
           </aside>
         )}
       </div>
+
+      <ReadingCompletionModal
+        isOpen={completionData !== null}
+        readingMinutes={completionData?.readingMinutes ?? 0}
+        focusPercent={completionData?.focusPercent ?? 0}
+        onGoLibrary={() => {
+          setCompletionData(null);
+          navigate("/children/library", { replace: true });
+        }}
+      />
     </div>
   );
 };
