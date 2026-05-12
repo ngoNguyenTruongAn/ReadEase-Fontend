@@ -90,11 +90,19 @@ const EARLY_FLUSH_COOLDOWN_MS = 80;
 const DWELL_SAMPLE_INTERVAL_MS = 140;
 const MIN_STABLE_SOCKET_UPTIME_MS = 2500;
 const QUICK_CLOSE_THRESHOLD_MS = 180;
-const LOCAL_FALLBACK_COOLDOWN_MS = 1800;
-const LOCAL_FALLBACK_SIGNAL_RESET_MS = 1600;
-const LOCAL_FALLBACK_REGRESSION_MIN_DELTA = 2;
-const LOCAL_FALLBACK_REGRESSION_TRIGGER_SCORE = 2;
-const LOCAL_FALLBACK_DWELL_TRIGGER_SAMPLES = 6;
+const LOCAL_FALLBACK_COOLDOWN_MS = 3600;
+const LOCAL_FALLBACK_SIGNAL_RESET_MS = 5000;
+const LOCAL_FALLBACK_DWELL_MIN_MS = 3500;
+const LOCAL_FALLBACK_DWELL_POINTER_TOLERANCE_PX = 6;
+// DEV_TEST_MODE: hạ threshold để dễ trigger REGRESSION khi test thủ công.
+// Trước khi release, restore về: MIN_TOTAL_DELTA=2, MIN_EVENTS=2, MIN_DURATION_MS=3000, MAX_GAP_MS=1800
+const DEV_TEST_REGRESSION = import.meta.env.DEV;
+const LOCAL_FALLBACK_REGRESSION_MIN_STEP_DELTA = 1;
+const LOCAL_FALLBACK_REGRESSION_MIN_TOTAL_DELTA = DEV_TEST_REGRESSION ? 1 : 2;
+const LOCAL_FALLBACK_REGRESSION_MIN_EVENTS      = DEV_TEST_REGRESSION ? 1 : 2;
+const LOCAL_FALLBACK_REGRESSION_MIN_DURATION_MS = DEV_TEST_REGRESSION ? 800 : 3000;
+const LOCAL_FALLBACK_REGRESSION_MAX_GAP_MS      = DEV_TEST_REGRESSION ? 3000 : 1800;
+const LOCAL_FALLBACK_BEHAVIOR_READY_TTL_MS = 4000;
 
 const HANDSHAKE_VARIANTS = [
   "tracking:token-only",
@@ -104,6 +112,36 @@ const scheduleMicrotask =
   typeof queueMicrotask === "function"
     ? queueMicrotask
     : (callback) => Promise.resolve().then(callback);
+
+const createInitialLocalFallbackSignal = (lastTriggeredAt = 0) => ({
+  lastWordIndex: null,
+  dwellWordIndex: null,
+  dwellStartedAt: null,
+  dwellX: null,
+  dwellY: null,
+  lastObservedAt: null,
+  lastTriggeredAt,
+  dwellReadyAt: null,
+  regressionStartedAt: null,
+  regressionStartWordIndex: null,
+  regressionLowestWordIndex: null,
+  regressionStepCount: 0,
+  regressionLastBackwardAt: null,
+  regressionReadyAt: null,
+  regressionReadyWordIndex: null,
+});
+
+const resetRegressionSignal = (signal, { clearReadiness = true } = {}) => {
+  signal.regressionStartedAt = null;
+  signal.regressionStartWordIndex = null;
+  signal.regressionLowestWordIndex = null;
+  signal.regressionStepCount = 0;
+  signal.regressionLastBackwardAt = null;
+  if (clearReadiness) {
+    signal.regressionReadyAt = null;
+    signal.regressionReadyWordIndex = null;
+  }
+};
 
 const toIntegerOrNull = (value) => {
   const parsed = Number(value);
@@ -128,6 +166,7 @@ const useReadingDualInterventionSession = ({
   flushIntervalMs = DEFAULT_FLUSH_INTERVAL_MS,
   fluentTimeoutMs = DEFAULT_FLUENT_TIMEOUT_MS,
   resolveTooltipByWordIndex,
+  onAdaptationState,
 }) => {
   const socketRef = useRef(null);
   const pointBufferRef = useRef([]);
@@ -140,20 +179,14 @@ const useReadingDualInterventionSession = ({
   const socketOpenedAtRef = useRef(0);
   const sessionStartStrategyRef = useRef(0);
   const handshakeVariantRef = useRef(0);
+  const pendingAdaptationRef = useRef(null);
   const pointStatsRef = useRef({
     withWordIndex: 0,
     withoutWordIndex: 0,
     syntheticPoints: 0,
   });
   const localFallbackAllowedRef = useRef(false);
-  const localFallbackSignalRef = useRef({
-    lastWordIndex: null,
-    regressionScore: 0,
-    dwellWordIndex: null,
-    dwellSamples: 0,
-    lastObservedAt: 0,
-    lastTriggeredAt: 0,
-  });
+  const localFallbackSignalRef = useRef(createInitialLocalFallbackSignal());
   const lastPointerRef = useRef({
     x: null,
     y: null,
@@ -164,12 +197,17 @@ const useReadingDualInterventionSession = ({
   const lastAckedTooltipIdRef = useRef("");
   const currentWordIndexRef = useRef(null);
   const resolveTooltipByWordIndexRef = useRef(resolveTooltipByWordIndex);
+  const onAdaptationStateRef = useRef(onAdaptationState);
   const sessionIdRef = useRef("");
 
   const [visualFlags, setVisualFlags] = useState(INITIAL_VISUAL_FLAGS);
   const [wordIntervention, setWordIntervention] = useState(INITIAL_WORD_INTERVENTION);
   const [activeTooltip, setActiveTooltip] = useState(null);
   const [trackingDebug, setTrackingDebug] = useState(INITIAL_TRACKING_DEBUG);
+
+  useEffect(() => {
+    onAdaptationStateRef.current = onAdaptationState;
+  }, [onAdaptationState]);
 
   const markDebug = useCallback((patch) => {
     scheduleMicrotask(() => {
@@ -180,6 +218,27 @@ const useReadingDualInterventionSession = ({
       }));
     });
   }, []);
+
+  const emitAdaptationState = useCallback(
+    (payload, { source = "backend", reason = "" } = {}) => {
+      const callback = onAdaptationStateRef.current;
+      if (typeof callback !== "function") return;
+
+      try {
+        callback({
+          ...(payload || {}),
+          source,
+          reason: reason || "",
+          sessionId: sessionIdRef.current,
+          contentId: contentId ?? null,
+          timestamp: Date.now(),
+        });
+      } catch {
+        // ignore consumer errors
+      }
+    },
+    [contentId],
+  );
 
   const countOutbound = useCallback((eventName, metadata = {}) => {
     setTrackingDebug((previous) => {
@@ -284,6 +343,7 @@ const useReadingDualInterventionSession = ({
   );
 
   const resetFluentUi = useCallback(() => {
+    pendingAdaptationRef.current = null;
     setVisualFlags(INITIAL_VISUAL_FLAGS);
     setWordIntervention(INITIAL_WORD_INTERVENTION);
     setActiveTooltip(null);
@@ -295,14 +355,9 @@ const useReadingDualInterventionSession = ({
   }, [markDebug]);
 
   const resetLocalFallbackSignal = useCallback(() => {
-    localFallbackSignalRef.current = {
-      lastWordIndex: null,
-      regressionScore: 0,
-      dwellWordIndex: null,
-      dwellSamples: 0,
-      lastObservedAt: 0,
-      lastTriggeredAt: localFallbackSignalRef.current.lastTriggeredAt,
-    };
+    localFallbackSignalRef.current = createInitialLocalFallbackSignal(
+      localFallbackSignalRef.current.lastTriggeredAt,
+    );
   }, []);
 
   const armFluentTimer = useCallback(() => {
@@ -397,27 +452,65 @@ const useReadingDualInterventionSession = ({
 
       localFallbackSignalRef.current.lastTriggeredAt = now;
 
+      const fallbackParams = {
+        letterSpacing: 0.094,
+        transitionMs: 130,
+        colorBandingStrength: 0.24,
+        invertedDeep: true,
+        invertedStrength: 0.9,
+        contrastBoost: 1.22,
+      };
+
       setVisualFlags(
         createVisualFlagsFromAdaptation({
           state: ADAPTATION_STATES.REGRESSION,
           mode: "DUAL_INTERVENTION",
           confidence: 0.88,
           params: {
-            letterSpacing: 0.094,
-            transitionMs: 130,
-            colorBandingStrength: 0.24,
-            invertedDeep: true,
-            invertedStrength: 0.9,
-            contrastBoost: 1.22,
+            ...fallbackParams,
           },
         }),
       );
 
       const resolvedWordIndex = Number.isInteger(wordIndex) && wordIndex >= 0 ? wordIndex : null;
+
+      // Local fallback thresholds (MIN_EVENTS >= 2, MIN_DURATION >= 3000ms, MIN_TOTAL_DELTA >= 2)
+      // guarantee at least STRONG by the time this fires. Classify LOOP if step count is high.
+      const signal = localFallbackSignalRef.current;
+      const backtrackDelta =
+        Number.isInteger(signal.regressionStartWordIndex) &&
+        Number.isInteger(signal.regressionLowestWordIndex)
+          ? signal.regressionStartWordIndex - signal.regressionLowestWordIndex
+          : 0;
+      const stepCount = signal.regressionStepCount ?? 0;
+
+      const localRegressionType = stepCount >= 4 ? "LOOP" : "STRONG";
+      const localFocusRadius =
+        localRegressionType === "LOOP" ? 3 : Math.max(1, backtrackDelta - 1);
+
+      emitAdaptationState(
+        {
+          state: ADAPTATION_STATES.REGRESSION,
+          mode: "DUAL_INTERVENTION",
+          adaptationType: "LOCAL_FALLBACK",
+          confidence: 0.88,
+          params: {
+            ...fallbackParams,
+          },
+          wordIndex: resolvedWordIndex,
+        },
+        {
+          source: "local-fallback",
+          reason: reason || "local-fallback",
+        },
+      );
+
       setWordIntervention((previous) => ({
         ...previous,
         distractionWordIndex: null,
         regressionWordIndex: resolvedWordIndex,
+        regressionType: localRegressionType,
+        regressionFocusRadius: localFocusRadius,
         semanticWordIndex: resolvedWordIndex,
       }));
 
@@ -432,42 +525,142 @@ const useReadingDualInterventionSession = ({
 
       armFluentTimer();
     },
-    [armFluentTimer],
+    [armFluentTimer, emitAdaptationState],
   );
 
   const evaluateRegressionFallbackByWordIndex = useCallback(
     ({ wordIndex, timestamp }) => {
-      if (!localFallbackAllowedRef.current) return;
-      if (!Number.isInteger(wordIndex) || wordIndex < 0) return;
+      if (!Number.isInteger(wordIndex) || wordIndex < 0) return false;
 
       const signal = localFallbackSignalRef.current;
+      let isRegressionReady = false;
 
-      if (timestamp - signal.lastObservedAt > LOCAL_FALLBACK_SIGNAL_RESET_MS) {
-        signal.regressionScore = 0;
+      if (
+        Number.isFinite(signal.lastObservedAt) &&
+        timestamp - signal.lastObservedAt > LOCAL_FALLBACK_SIGNAL_RESET_MS
+      ) {
+        resetRegressionSignal(signal);
       }
 
       if (Number.isInteger(signal.lastWordIndex)) {
-        const backtrackDelta = signal.lastWordIndex - wordIndex;
+        const wordDelta = wordIndex - signal.lastWordIndex;
 
-        if (backtrackDelta >= LOCAL_FALLBACK_REGRESSION_MIN_DELTA) {
-          signal.regressionScore += 1;
-        } else if (wordIndex > signal.lastWordIndex) {
-          signal.regressionScore = Math.max(0, signal.regressionScore - 0.35);
-        } else {
-          signal.regressionScore = Math.max(0, signal.regressionScore - 0.15);
+        if (wordDelta <= -LOCAL_FALLBACK_REGRESSION_MIN_STEP_DELTA) {
+          const backwardGapMs = Number.isFinite(signal.regressionLastBackwardAt)
+            ? timestamp - signal.regressionLastBackwardAt
+            : 0;
+          const shouldStartRegressionRun =
+            signal.regressionStartedAt === null ||
+            backwardGapMs > LOCAL_FALLBACK_REGRESSION_MAX_GAP_MS ||
+            !Number.isInteger(signal.regressionStartWordIndex);
+
+          if (shouldStartRegressionRun) {
+            signal.regressionStartedAt = Number.isFinite(signal.lastObservedAt)
+              ? signal.lastObservedAt
+              : timestamp;
+            signal.regressionStartWordIndex = signal.lastWordIndex;
+            signal.regressionLowestWordIndex = wordIndex;
+            signal.regressionStepCount = 1;
+          } else {
+            signal.regressionLowestWordIndex = Math.min(
+              signal.regressionLowestWordIndex,
+              wordIndex,
+            );
+            signal.regressionStepCount += 1;
+          }
+
+          signal.regressionLastBackwardAt = timestamp;
+
+          const regressionDurationMs = timestamp - signal.regressionStartedAt;
+          const totalBacktrackDelta =
+            signal.regressionStartWordIndex - signal.regressionLowestWordIndex;
+          const hasSustainedRegression =
+            regressionDurationMs > LOCAL_FALLBACK_REGRESSION_MIN_DURATION_MS &&
+            totalBacktrackDelta >= LOCAL_FALLBACK_REGRESSION_MIN_TOTAL_DELTA &&
+            signal.regressionStepCount >= LOCAL_FALLBACK_REGRESSION_MIN_EVENTS;
+
+          if (hasSustainedRegression) {
+            isRegressionReady = true;
+            signal.regressionReadyAt = timestamp;
+            signal.regressionReadyWordIndex = wordIndex;
+            resetRegressionSignal(signal, { clearReadiness: false });
+            if (localFallbackAllowedRef.current) {
+              triggerLocalFallbackIntervention({
+                wordIndex,
+                reason: "local-regression-backtrack",
+              });
+            }
+          }
+        } else if (wordDelta > 0) {
+          resetRegressionSignal(signal);
+          if (pendingAdaptationRef.current?.payload?.state === ADAPTATION_STATES.REGRESSION) {
+            pendingAdaptationRef.current = null;
+          }
+        } else if (
+          Number.isFinite(signal.regressionLastBackwardAt) &&
+          timestamp - signal.regressionLastBackwardAt > LOCAL_FALLBACK_REGRESSION_MAX_GAP_MS
+        ) {
+          resetRegressionSignal(signal);
+          if (pendingAdaptationRef.current?.payload?.state === ADAPTATION_STATES.REGRESSION) {
+            pendingAdaptationRef.current = null;
+          }
         }
       }
 
       signal.lastWordIndex = wordIndex;
       signal.lastObservedAt = timestamp;
+      return isRegressionReady;
+    },
+    [triggerLocalFallbackIntervention],
+  );
 
-      if (signal.regressionScore >= LOCAL_FALLBACK_REGRESSION_TRIGGER_SCORE) {
-        signal.regressionScore = 0;
+  const evaluateDwellFallbackByPointer = useCallback(
+    ({ wordIndex, x, y, timestamp, shouldTrigger }) => {
+      if (!Number.isInteger(wordIndex) || wordIndex < 0) return false;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+
+      const signal = localFallbackSignalRef.current;
+      const hasDwellAnchor = Number.isFinite(signal.dwellX) && Number.isFinite(signal.dwellY);
+      const pointerDistance = hasDwellAnchor
+        ? Math.hypot(x - signal.dwellX, y - signal.dwellY)
+        : 0;
+      const shouldResetDwell =
+        signal.dwellWordIndex !== wordIndex ||
+        !hasDwellAnchor ||
+        pointerDistance > LOCAL_FALLBACK_DWELL_POINTER_TOLERANCE_PX;
+
+      if (shouldResetDwell) {
+        signal.dwellWordIndex = wordIndex;
+        signal.dwellStartedAt = timestamp;
+        signal.dwellX = x;
+        signal.dwellY = y;
+        signal.dwellReadyAt = null;
+        if (pendingAdaptationRef.current?.payload?.state === ADAPTATION_STATES.DISTRACTION) {
+          pendingAdaptationRef.current = null;
+        }
+        return false;
+      }
+
+      if (!shouldTrigger || !Number.isFinite(signal.dwellStartedAt)) {
+        return false;
+      }
+
+      const dwellDurationMs = timestamp - signal.dwellStartedAt;
+      if (dwellDurationMs < LOCAL_FALLBACK_DWELL_MIN_MS) {
+        return false;
+      }
+
+      signal.dwellStartedAt = timestamp;
+      signal.dwellX = x;
+      signal.dwellY = y;
+      signal.dwellReadyAt = timestamp;
+      if (localFallbackAllowedRef.current) {
         triggerLocalFallbackIntervention({
           wordIndex,
-          reason: "local-regression-backtrack",
+          reason: "local-dwell-stall",
         });
       }
+      return true;
     },
     [triggerLocalFallbackIntervention],
   );
@@ -475,6 +668,8 @@ const useReadingDualInterventionSession = ({
   const applyAdaptationPayload = useCallback(
     (payload) => {
       if (!payload) return;
+
+      emitAdaptationState(payload, { source: "backend" });
 
       if (payload.state === ADAPTATION_STATES.FLUENT) {
         resetFluentUi();
@@ -509,14 +704,47 @@ const useReadingDualInterventionSession = ({
         }),
       );
 
-      setWordIntervention((previous) => ({
-        ...previous,
-        regressionWordIndex:
-          payload.state === ADAPTATION_STATES.REGRESSION ? payload.wordIndex : null,
-        distractionWordIndex:
-          payload.state === ADAPTATION_STATES.DISTRACTION ? payload.wordIndex : null,
-        semanticWordIndex: payload.state === ADAPTATION_STATES.REGRESSION ? payload.wordIndex : null,
-      }));
+      if (payload.state === ADAPTATION_STATES.REGRESSION) {
+        // BE only signals state:"REGRESSION" — classify subtype locally from the
+        // cursor signal that was already being tracked before BE responded.
+        const signal = localFallbackSignalRef.current;
+        const backtrackDelta =
+          Number.isInteger(signal.regressionStartWordIndex) &&
+          Number.isInteger(signal.regressionLowestWordIndex)
+            ? signal.regressionStartWordIndex - signal.regressionLowestWordIndex
+            : 0;
+        const stepCount = signal.regressionStepCount ?? 0;
+
+        const regressionType =
+          stepCount >= 4 ? "LOOP"
+          : backtrackDelta >= 4 ? "STRONG"
+          : backtrackDelta >= 2 ? "MILD"
+          : "MILD";
+
+        const regressionFocusRadius =
+          regressionType === "STRONG" ? Math.max(1, backtrackDelta - 1)
+          : regressionType === "LOOP" ? 3
+          : 0;
+
+        setWordIntervention((previous) => ({
+          ...previous,
+          regressionWordIndex: payload.wordIndex ?? null,
+          regressionType,
+          regressionFocusRadius,
+          distractionWordIndex: null,
+          semanticWordIndex: payload.wordIndex ?? null,
+        }));
+      } else {
+        setWordIntervention((previous) => ({
+          ...previous,
+          regressionWordIndex: null,
+          regressionType: null,
+          regressionFocusRadius: 0,
+          distractionWordIndex:
+            payload.state === ADAPTATION_STATES.DISTRACTION ? payload.wordIndex : null,
+          semanticWordIndex: null,
+        }));
+      }
 
       if (payload.state === ADAPTATION_STATES.DISTRACTION) {
         clearDistractionTimer();
@@ -538,7 +766,66 @@ const useReadingDualInterventionSession = ({
 
       armFluentTimer();
     },
-    [armFluentTimer, clearDistractionTimer, clearFluentTimer, resetFluentUi],
+    [armFluentTimer, clearDistractionTimer, clearFluentTimer, emitAdaptationState, resetFluentUi],
+  );
+
+  const isAdaptationBehaviorReady = useCallback((payload, timestamp = Date.now()) => {
+    if (!payload) return true;
+    if (payload.adaptationType === "SEMANTIC") return true;
+
+    const signal = localFallbackSignalRef.current;
+
+    if (payload.state === ADAPTATION_STATES.DISTRACTION) {
+      const payloadWordIndex = toIntegerOrNull(payload.wordIndex);
+      const currentWordIndex = currentWordIndexRef.current;
+      const dwellWordIndexMatches =
+        payloadWordIndex === null ||
+        payloadWordIndex === signal.dwellWordIndex ||
+        payloadWordIndex === currentWordIndex;
+      const dwellDurationReady =
+        Number.isFinite(signal.dwellStartedAt) &&
+        timestamp - signal.dwellStartedAt >= LOCAL_FALLBACK_DWELL_MIN_MS;
+      const dwellRecentlyReady =
+        Number.isFinite(signal.dwellReadyAt) &&
+        timestamp - signal.dwellReadyAt <= LOCAL_FALLBACK_BEHAVIOR_READY_TTL_MS;
+
+      return dwellWordIndexMatches && (dwellDurationReady || dwellRecentlyReady);
+    }
+
+    if (payload.state === ADAPTATION_STATES.REGRESSION) {
+      return (
+        Number.isFinite(signal.regressionReadyAt) &&
+        timestamp - signal.regressionReadyAt <= LOCAL_FALLBACK_BEHAVIOR_READY_TTL_MS
+      );
+    }
+
+    return true;
+  }, []);
+
+  const flushPendingAdaptationIfReady = useCallback(
+    ({ timestamp = Date.now() } = {}) => {
+      const pending = pendingAdaptationRef.current;
+      if (!pending?.payload) return false;
+      if (!isAdaptationBehaviorReady(pending.payload, timestamp)) return false;
+
+      pendingAdaptationRef.current = null;
+      applyAdaptationPayload(pending.payload);
+      return true;
+    },
+    [applyAdaptationPayload, isAdaptationBehaviorReady],
+  );
+
+  const shouldDelayAdaptationPayload = useCallback(
+    (payload, timestamp = Date.now()) => {
+      if (isAdaptationBehaviorReady(payload, timestamp)) return false;
+
+      pendingAdaptationRef.current = {
+        payload,
+        receivedAt: timestamp,
+      };
+      return true;
+    },
+    [isAdaptationBehaviorReady],
   );
 
   const handleSocketMessage = useCallback(
@@ -571,6 +858,10 @@ const useReadingDualInterventionSession = ({
 
       if (interpreted.type === "adaptation") {
         countInbound("adaptation", rawEventName);
+        if (shouldDelayAdaptationPayload(interpreted.payload)) {
+          return;
+        }
+
         applyAdaptationPayload(interpreted.payload);
         return;
       }
@@ -607,6 +898,7 @@ const useReadingDualInterventionSession = ({
       clearDistractionTimer,
       clearFluentTimer,
       resetFluentUi,
+      shouldDelayAdaptationPayload,
     ],
   );
 
@@ -645,15 +937,9 @@ const useReadingDualInterventionSession = ({
       withoutWordIndex: 0,
       syntheticPoints: 0,
     };
+    pendingAdaptationRef.current = null;
     localFallbackAllowedRef.current = false;
-    localFallbackSignalRef.current = {
-      lastWordIndex: null,
-      regressionScore: 0,
-      dwellWordIndex: null,
-      dwellSamples: 0,
-      lastObservedAt: 0,
-      lastTriggeredAt: 0,
-    };
+    localFallbackSignalRef.current = createInitialLocalFallbackSignal();
 
     resetFluentUi();
   }, [
@@ -679,14 +965,8 @@ const useReadingDualInterventionSession = ({
       withoutWordIndex: 0,
       syntheticPoints: 0,
     };
-    localFallbackSignalRef.current = {
-      lastWordIndex: null,
-      regressionScore: 0,
-      dwellWordIndex: null,
-      dwellSamples: 0,
-      lastObservedAt: 0,
-      lastTriggeredAt: 0,
-    };
+    pendingAdaptationRef.current = null;
+    localFallbackSignalRef.current = createInitialLocalFallbackSignal();
     lastPointerRef.current = {
       x: null,
       y: null,
@@ -968,32 +1248,26 @@ const useReadingDualInterventionSession = ({
       if (!pointer.inside) return;
       if (!Number.isFinite(pointer.x) || !Number.isFinite(pointer.y)) return;
 
-      appendTrackingPoint({
+      const timestamp = Date.now();
+      const activeWordIndex = currentWordIndexRef.current;
+      const isDwellReady = evaluateDwellFallbackByPointer({
+        wordIndex: activeWordIndex,
         x: pointer.x,
         y: pointer.y,
-        timestamp: Date.now(),
-        wordIndex: currentWordIndexRef.current,
-        isSynthetic: true,
+        timestamp,
+        shouldTrigger: true,
       });
 
-      const activeWordIndex = currentWordIndexRef.current;
-      if (localFallbackAllowedRef.current && Number.isInteger(activeWordIndex) && activeWordIndex >= 0) {
-        const signal = localFallbackSignalRef.current;
+      flushPendingAdaptationIfReady({ timestamp });
 
-        if (signal.dwellWordIndex === activeWordIndex) {
-          signal.dwellSamples += 1;
-        } else {
-          signal.dwellWordIndex = activeWordIndex;
-          signal.dwellSamples = 1;
-        }
-
-        if (signal.dwellSamples >= LOCAL_FALLBACK_DWELL_TRIGGER_SAMPLES) {
-          signal.dwellSamples = 0;
-          triggerLocalFallbackIntervention({
-            wordIndex: activeWordIndex,
-            reason: "local-dwell-stall",
-          });
-        }
+      if (isDwellReady) {
+        appendTrackingPoint({
+          x: pointer.x,
+          y: pointer.y,
+          timestamp,
+          wordIndex: activeWordIndex,
+          isSynthetic: true,
+        });
       }
 
       const socket = socketRef.current;
@@ -1009,8 +1283,9 @@ const useReadingDualInterventionSession = ({
     appendTrackingPoint,
     clearDwellTimer,
     enabled,
+    evaluateDwellFallbackByPointer,
     flushPoints,
-    triggerLocalFallbackIntervention,
+    flushPendingAdaptationIfReady,
   ]);
 
   const handleStoryPointerMove = useCallback((event) => {
@@ -1040,6 +1315,16 @@ const useReadingDualInterventionSession = ({
       timestamp,
     });
 
+    evaluateDwellFallbackByPointer({
+      wordIndex: resolvedWordIndex,
+      x: event.clientX,
+      y: event.clientY,
+      timestamp,
+      shouldTrigger: false,
+    });
+
+    flushPendingAdaptationIfReady({ timestamp });
+
     appendTrackingPoint({
       x: event.clientX,
       y: event.clientY,
@@ -1061,7 +1346,14 @@ const useReadingDualInterventionSession = ({
       lastEarlyFlushAtRef.current = now;
       flushPoints();
     }
-  }, [appendTrackingPoint, enabled, evaluateRegressionFallbackByWordIndex, flushPoints]);
+  }, [
+    appendTrackingPoint,
+    enabled,
+    evaluateDwellFallbackByPointer,
+    evaluateRegressionFallbackByWordIndex,
+    flushPoints,
+    flushPendingAdaptationIfReady,
+  ]);
 
   const handleStoryPointerLeave = useCallback(() => {
     lastPointerRef.current = {
@@ -1069,6 +1361,7 @@ const useReadingDualInterventionSession = ({
       inside: false,
     };
 
+    pendingAdaptationRef.current = null;
     resetLocalFallbackSignal();
   }, [resetLocalFallbackSignal]);
 

@@ -1,3 +1,4 @@
+@use "sass:color";
 @use "../../../../styles/variables" as *;
 
 .validate-page {
@@ -100,7 +101,7 @@
   text-underline-offset: 3px;
 
   &:hover:not(:disabled) {
-    color: darken($primary-color, 8%);
+    color: color.adjust($primary-color, $lightness: -8%);
   }
 
   &:disabled {
@@ -132,7 +133,7 @@
   transition: 0.2s;
 
   &:hover {
-    background: darken($primary-color, 6%);
+    background: color.adjust($primary-color, $lightness: -6%);
     transform: translateY(-1px);
   }
 

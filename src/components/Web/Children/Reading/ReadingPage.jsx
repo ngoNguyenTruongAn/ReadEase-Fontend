@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import instance from "../../../../app/instance";
 import ContenAPI from "../../../../service/Contents/ContenAPI";
@@ -8,7 +8,10 @@ import ReadingBookView from "./components/ReadingBookView";
 import ReadingPagination from "./components/ReadingPagination";
 import ReadingScorePanel from "./components/ReadingScorePanel";
 import useReadingDualInterventionSession from "./dualIntervention/hooks/useReadingDualInterventionSession";
-import { extractHybridVietnameseWordEntries } from "./dualIntervention/tokenization/hybridVietnameseSegmentation";
+import {
+  countHybridVietnameseWords,
+  extractHybridVietnameseWordEntries,
+} from "./dualIntervention/tokenization/hybridVietnameseSegmentation";
 import useHoverSpeech from "./hooks/useHoverSpeech";
 import {
   buildUnavailableStoryPayload,
@@ -21,6 +24,8 @@ import {
   STORY_FALLBACK,
 } from "./readingUtils";
 import "./ReadingPage.scss";
+import { toast } from "react-toastify";
+import ReadingCompletionModal from "./ReadingCompletionModal";
 
 const CONTENT_AVAILABILITY_DEFAULT = {
   isUnavailable: false,
@@ -33,6 +38,13 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const isLikelyBackendContentId = (value) => UUID_PATTERN.test(String(value ?? "").trim());
+
+const toWordIndexOrNull = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  const rounded = Number.isInteger(parsed) ? parsed : Math.round(parsed);
+  return rounded >= 0 ? rounded : null;
+};
 
 const getStoredAccessToken = () =>
   localStorage.getItem("access_token") ||
@@ -75,6 +87,88 @@ const resolveAdaptivePageCharLimit = (viewportWidth) => {
   return 300;
 };
 
+const createInitialReadingSessionMetrics = () => ({
+  startedAt: null,
+  endedAt: null,
+  trackingSessionId: "",
+  adaptationCounts: {
+    FLUENT: 0,
+    DISTRACTION: 0,
+    REGRESSION: 0,
+    OTHER: 0,
+    TOTAL: 0,
+  },
+  interventionWordHits: new Map(),
+});
+
+const computeSessionSummary = ({
+  metrics,
+  wordOffsetByPage,
+  totalWords,
+}) => {
+  const startedAt = Number.isFinite(metrics?.startedAt) ? metrics.startedAt : null;
+  const endedAt = Number.isFinite(metrics?.endedAt) ? metrics.endedAt : null;
+  const durationMs =
+    startedAt !== null && endedAt !== null ? Math.max(0, endedAt - startedAt) : 0;
+
+  const counts = metrics?.adaptationCounts || {};
+  const distractionCount = Number(counts.DISTRACTION || 0) || 0;
+  const regressionCount = Number(counts.REGRESSION || 0) || 0;
+  const fluentCount = Number(counts.FLUENT || 0) || 0;
+
+  const safeTotalWords = Number.isFinite(totalWords) && totalWords > 0 ? totalWords : 0;
+  const durationMinutes = durationMs / 60000;
+  const safeMinutes = durationMinutes > 0 ? durationMinutes : 0;
+
+  const distractionPerMinute = safeMinutes > 0 ? distractionCount / safeMinutes : 0;
+  const regressionPerMinute = safeMinutes > 0 ? regressionCount / safeMinutes : 0;
+  const distractionPer100Words =
+    safeTotalWords > 0 ? (distractionCount / safeTotalWords) * 100 : 0;
+  const regressionPer100Words =
+    safeTotalWords > 0 ? (regressionCount / safeTotalWords) * 100 : 0;
+
+  let repeatedInterventionWords = 0;
+  let repeatedInterventionExtraHits = 0;
+  const hitMap = metrics?.interventionWordHits;
+  if (hitMap && typeof hitMap.forEach === "function") {
+    hitMap.forEach((count) => {
+      const n = Number(count) || 0;
+      if (n > 1) {
+        repeatedInterventionWords += 1;
+        repeatedInterventionExtraHits += n - 1;
+      }
+    });
+  }
+
+  return {
+    startedAt,
+    endedAt,
+    durationMs,
+    durationMinutes,
+    trackingSessionId: metrics?.trackingSessionId || "",
+    totalWords: safeTotalWords,
+    counts: {
+      fluent: fluentCount,
+      distraction: distractionCount,
+      regression: regressionCount,
+      total: Number(counts.TOTAL || 0) || 0,
+    },
+    rates: {
+      distractionPerMinute,
+      regressionPerMinute,
+      distractionPer100Words,
+      regressionPer100Words,
+    },
+    interventions: {
+      repeatedInterventionWords,
+      repeatedInterventionExtraHits,
+    },
+    debug: {
+      wordOffsetByPageCount: Array.isArray(wordOffsetByPage) ? wordOffsetByPage.length : 0,
+    },
+  };
+};
+
 const ReadingPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -82,6 +176,10 @@ const ReadingPage = () => {
     () => location.state?.story ?? getSelectedStory(),
     [location.state],
   );
+
+  const [childId, setChildId] = useState("");
+  const [isFinishingSession, setIsFinishingSession] = useState(false);
+  const [completionData, setCompletionData] = useState(null); // { readingMinutes, focusPercent }
 
   const [authStatus, setAuthStatus] = useState("checking");
   const [authDebug, setAuthDebug] = useState({
@@ -105,6 +203,33 @@ const ReadingPage = () => {
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth : 1200,
   );
+
+  const visitedPagesRef = useRef(new Set([0]));
+  const [visitedPagesCount, setVisitedPagesCount] = useState(1);
+  const [completedPageIndexes, setCompletedPageIndexes] = useState(() => new Set());
+  const [hasReachedStoryEndCursor, setHasReachedStoryEndCursor] = useState(false);
+  const currentPageRef = useRef(0);
+  const sessionMetricsRef = useRef(createInitialReadingSessionMetrics());
+  const finishInFlightRef = useRef(false);
+  const canExitSessionRef = useRef(false);
+  const storyEndCursorReachedRef = useRef(false);
+
+  /**
+   * Tracks sequential reading progress per page.
+   *
+   * maxWordIndexSeen  – highest word index the cursor has visited on this page
+   *                     (never decreases; regression doesn’t lose progress).
+   * expectedNextIndex – the minimum word index the cursor must reach next to
+   *                     count as a continuous forward sweep. Resets on page change.
+   *
+   * A page is “completed” only when the cursor has swept words 0 → lastWord
+   * without skipping any word — every word must be hovered in order.
+   */
+  const pageReadProgressRef = useRef({ maxWordIndexSeen: -1, expectedNextIndex: 0 });
+
+
+
+  // Zero tolerance: the cursor must pass over every word in sequence.
 
   const {
     handleHoverStart: handleHoverSpeechStart,
@@ -154,6 +279,10 @@ const ReadingPage = () => {
         if (!isMounted) return;
 
         const profile = normalizeProfilePayload(profilePayload);
+        const resolvedChildId = String(
+          profile?.id || profile?._id || profile?.user_id || "",
+        ).trim();
+        setChildId(resolvedChildId);
         setAvatarUrl(
           profile?.avatarUrl ||
             profile?.avatar ||
@@ -355,6 +484,17 @@ const ReadingPage = () => {
   }, [story.title]);
 
   useEffect(() => {
+    // Reset session tracking when the story changes.
+    visitedPagesRef.current = new Set([0]);
+    setVisitedPagesCount(1);
+    setCompletedPageIndexes(new Set());
+    storyEndCursorReachedRef.current = false;
+    setHasReachedStoryEndCursor(false);
+    sessionMetricsRef.current = createInitialReadingSessionMetrics();
+    finishInFlightRef.current = false;
+  }, [story.title]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return undefined;
 
     const handleResize = () => {
@@ -417,6 +557,40 @@ const ReadingPage = () => {
     [pageWordEntries],
   );
 
+  const pageWordCounts = useMemo(() => {
+    const pages = Array.isArray(renderedStoryPages?.segmentedPages)
+      ? renderedStoryPages.segmentedPages
+      : [];
+    return pages.map((page) => countHybridVietnameseWords(page));
+  }, [renderedStoryPages?.segmentedPages]);
+
+  const wordOffsetByPage = useMemo(() => {
+    const offsets = [];
+    let running = 0;
+    pageWordCounts.forEach((count) => {
+      offsets.push(running);
+      running += Number(count) || 0;
+    });
+    return offsets;
+  }, [pageWordCounts]);
+
+  const totalWords = useMemo(
+    () => pageWordCounts.reduce((acc, value) => acc + (Number(value) || 0), 0),
+    [pageWordCounts],
+  );
+  const pageLastWordIndexByPage = useMemo(
+    () =>
+      pageWordCounts.map((count) => {
+        const normalizedCount = Number(count) || 0;
+        return normalizedCount > 0 ? normalizedCount - 1 : -1;
+      }),
+    [pageWordCounts],
+  );
+  const currentPageLastWordIndex = pageLastWordIndexByPage[safeCurrentPage] ?? -1;
+  const lastPageIndex = Math.max(totalPages - 1, 0);
+  const lastPageLastWordIndex = pageLastWordIndexByPage[lastPageIndex] ?? -1;
+  const requiresCursorCompletion = !isContentUnavailable && lastPageLastWordIndex >= 0;
+
   const {
     visualFlags,
     wordIntervention,
@@ -425,6 +599,7 @@ const ReadingPage = () => {
     handleStoryPointerMove,
     handleStoryPointerLeave,
     handleTooltipRendered,
+    endSession,
   } = useReadingDualInterventionSession({
     enabled:
       authStatus === "authenticated" && !isLoading && !isContentUnavailable && Boolean(pageText),
@@ -432,7 +607,323 @@ const ReadingPage = () => {
       story?.contentId ?? selectedStory?.id ?? selectedStory?._id ?? selectedStory?.storyId,
     apiBaseUrl: instance?.defaults?.baseURL,
     resolveTooltipByWordIndex,
+    onAdaptationState: useCallback(
+      (event) => {
+        if (!event) return;
+
+        const metrics = sessionMetricsRef.current;
+        if (metrics.startedAt === null) {
+          metrics.startedAt = Date.now();
+        }
+
+        if (event?.sessionId && !metrics.trackingSessionId) {
+          metrics.trackingSessionId = String(event.sessionId || "");
+        }
+
+        const state = String(event?.state || "").toUpperCase();
+        metrics.adaptationCounts.TOTAL += 1;
+        if (state === "FLUENT") metrics.adaptationCounts.FLUENT += 1;
+        else if (state === "DISTRACTION") metrics.adaptationCounts.DISTRACTION += 1;
+        else if (state === "REGRESSION") metrics.adaptationCounts.REGRESSION += 1;
+        else metrics.adaptationCounts.OTHER += 1;
+
+        // Track repeated word interventions for non-FLUENT states.
+        if (state !== "FLUENT") {
+          const wordIndex = event?.wordIndex;
+          const pageIndex = currentPageRef.current;
+          const offset = Number.isInteger(wordOffsetByPage?.[pageIndex])
+            ? wordOffsetByPage[pageIndex]
+            : null;
+
+          if (Number.isInteger(wordIndex) && wordIndex >= 0) {
+            const key = offset !== null ? String(offset + wordIndex) : `${pageIndex}:${wordIndex}`;
+            const previous = metrics.interventionWordHits.get(key) || 0;
+            metrics.interventionWordHits.set(key, previous + 1);
+          }
+        }
+      },
+      [wordOffsetByPage],
+    ),
   });
+
+  const isSessionActive =
+    authStatus === "authenticated" && !isLoading && !isContentUnavailable && Boolean(pageText);
+
+  useEffect(() => {
+    if (!isSessionActive) return;
+    const metrics = sessionMetricsRef.current;
+    if (metrics.startedAt === null) {
+      metrics.startedAt = Date.now();
+    }
+  }, [isSessionActive]);
+
+  useEffect(() => {
+    const sessionId = String(trackingDebug?.sessionId || "").trim();
+    if (!sessionId) return;
+    const metrics = sessionMetricsRef.current;
+    if (!metrics.trackingSessionId) {
+      metrics.trackingSessionId = sessionId;
+    }
+  }, [trackingDebug?.sessionId]);
+
+  useEffect(() => {
+    currentPageRef.current = safeCurrentPage;
+    // Reset sequential-read progress whenever the reader moves to a different page.
+    pageReadProgressRef.current = { maxWordIndexSeen: -1, expectedNextIndex: 0 };
+  }, [safeCurrentPage]);
+
+  useEffect(() => {
+    // Track page coverage for “must finish story before exit”.
+    const set = visitedPagesRef.current;
+    const beforeSize = set.size;
+    set.add(safeCurrentPage);
+    if (set.size !== beforeSize) {
+      setVisitedPagesCount(set.size);
+    }
+  }, [safeCurrentPage]);
+
+  useEffect(() => {
+    if (isContentUnavailable) return;
+    if (storyEndCursorReachedRef.current) return;
+
+    const isOnLastPage = safeCurrentPage >= totalPages - 1;
+    if (!isOnLastPage) return;
+    if (lastPageLastWordIndex >= 0) return;
+
+    storyEndCursorReachedRef.current = true;
+    setHasReachedStoryEndCursor(true);
+  }, [isContentUnavailable, lastPageLastWordIndex, safeCurrentPage, totalPages]);
+
+  const handleReadingPointerMove = useCallback(
+    (event) => {
+      const wordElement = event?.target?.closest?.("[data-word-index]");
+      const resolvedWordIndex = toWordIndexOrNull(
+        wordElement?.getAttribute?.("data-word-index"),
+      );
+
+      if (resolvedWordIndex !== null && currentPageLastWordIndex >= 0) {
+        const progress = pageReadProgressRef.current;
+
+        // Strict sequential rule: only the exact next expected word advances
+        // the frontier. Hovering the same word twice or moving backward is
+        // ignored (no credit lost, no credit gained).
+        if (resolvedWordIndex === progress.expectedNextIndex) {
+          progress.maxWordIndexSeen = resolvedWordIndex;
+          progress.expectedNextIndex = resolvedWordIndex + 1;
+        }
+        // Any forward jump larger than 1 word leaves expectedNextIndex in place.
+        // The child must come back and hover each skipped word before progressing.
+
+        // Page is complete once every word up to the last has been hovered.
+        const hasSweptToEnd = progress.maxWordIndexSeen >= currentPageLastWordIndex;
+        if (hasSweptToEnd) {
+          setCompletedPageIndexes((prev) => {
+            if (prev.has(safeCurrentPage)) return prev;
+            const next = new Set(prev);
+            next.add(safeCurrentPage);
+            return next;
+          });
+        }
+
+        // Track story-end cursor for the session exit gate (last page only).
+        if (!storyEndCursorReachedRef.current && safeCurrentPage >= totalPages - 1) {
+          if (hasSweptToEnd && progress.maxWordIndexSeen >= lastPageLastWordIndex) {
+            storyEndCursorReachedRef.current = true;
+            setHasReachedStoryEndCursor(true);
+          }
+        }
+      }
+
+      handleStoryPointerMove?.(event);
+    },
+    [
+      currentPageLastWordIndex,
+      handleStoryPointerMove,
+      lastPageLastWordIndex,
+      safeCurrentPage,
+      totalPages,
+    ],
+  );
+
+  // A page is "read" once the cursor has hovered every word in order,
+  // without skipping any. Backward movement is ignored (no progress lost).
+  const isCurrentPageCompleted = completedPageIndexes.has(safeCurrentPage);
+  const canGoNextPage =
+    isContentUnavailable ||
+    safeCurrentPage >= totalPages - 1 ||
+    isCurrentPageCompleted ||
+    currentPageLastWordIndex < 0; // page has no trackable words — allow freely
+  const nextPageBlockedMessage = canGoNextPage
+    ? ""
+    : "Hãy đọc hết trang trước khi sang trang tiếp theo.";
+
+  const canExitSession = useMemo(() => {
+    if (isLoading) return false;
+    if (isContentUnavailable) return true;
+    const visitedAllPages = visitedPagesCount >= totalPages;
+    const isOnLastPage = safeCurrentPage >= totalPages - 1;
+    const hasReachedLastWord = !requiresCursorCompletion || hasReachedStoryEndCursor;
+    return visitedAllPages && isOnLastPage && hasReachedLastWord;
+  }, [
+    hasReachedStoryEndCursor,
+    isContentUnavailable,
+    isLoading,
+    requiresCursorCompletion,
+    safeCurrentPage,
+    totalPages,
+    visitedPagesCount,
+  ]);
+
+  const exitBlockedMessage = useMemo(() => {
+    const visitedAllPages = visitedPagesCount >= totalPages;
+    const isOnLastPage = safeCurrentPage >= totalPages - 1;
+
+    if (!visitedAllPages || !isOnLastPage) {
+      return "Bạn cần đọc hết truyện trước khi hoàn thành phiên đọc.";
+    }
+
+    if (requiresCursorCompletion && !hasReachedStoryEndCursor) {
+      return "Hãy di chuyển con trỏ tới chữ cuối cùng ở trang cuối để xác nhận đã đọc xong.";
+    }
+
+    return "Bạn cần đọc hết truyện trước khi hoàn thành phiên đọc.";
+  }, [
+    hasReachedStoryEndCursor,
+    requiresCursorCompletion,
+    safeCurrentPage,
+    totalPages,
+    visitedPagesCount,
+  ]);
+
+  useEffect(() => {
+    canExitSessionRef.current = canExitSession;
+  }, [canExitSession]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const handleBeforeUnload = (event) => {
+      if (canExitSessionRef.current) return;
+
+      event.preventDefault();
+      // Most browsers ignore custom text, but returnValue is still required.
+      event.returnValue = "";
+      return "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const pushGuardState = () => {
+      try {
+        window.history.pushState({ readeaseReadingGuard: true }, "", window.location.href);
+      } catch {
+        // ignore
+      }
+    };
+
+    // Add an extra entry so the Back button doesn't leave immediately.
+    pushGuardState();
+
+    const handlePopState = () => {
+      if (canExitSessionRef.current) return;
+      pushGuardState();
+      toast.info(exitBlockedMessage);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [exitBlockedMessage]);
+
+  const handleExitSession = useCallback(async () => {
+    if (isContentUnavailable) {
+      try {
+        endSession?.();
+      } catch {
+        // ignore
+      }
+
+      navigate("/children/library", { replace: true });
+      return;
+    }
+
+    if (!canExitSession) {
+      toast.info(exitBlockedMessage);
+      return;
+    }
+
+    if (finishInFlightRef.current) return;
+    finishInFlightRef.current = true;
+    setIsFinishingSession(true);
+
+    const metrics = sessionMetricsRef.current;
+    metrics.endedAt = Date.now();
+
+    const summary = computeSessionSummary({
+      metrics,
+      wordOffsetByPage,
+      totalWords,
+    });
+
+    try {
+      if (typeof window !== "undefined" && window.sessionStorage) {
+        window.sessionStorage.setItem(
+          "readease:reading:lastSession",
+          JSON.stringify({
+            kind: "reading-session",
+            childId,
+            contentId:
+              story?.contentId ?? selectedStory?.id ?? selectedStory?._id ?? selectedStory?.storyId,
+            summary,
+            savedAt: Date.now(),
+          }),
+        );
+      }
+    } catch {
+      // ignore storage errors
+    }
+
+    const readingMinutes = summary.durationMinutes;
+    const focusPercent = (() => {
+      const totalMs = summary.durationMs;
+      if (totalMs <= 0) return 100;
+
+      const badEvents = summary.counts.distraction + summary.counts.regression;
+      // Moi bad event phat 1% cho moi phut doc
+      const penaltyPerEvent = Math.max(1, Math.round(60000 / totalMs));
+      const totalPenalty = Math.min(badEvents * penaltyPerEvent, 50);
+
+      // San 50% de tranh hien thi ket qua qua thap gay nan cho tre
+      return Math.max(50, 100 - totalPenalty);
+    })();
+
+    try {
+      endSession?.();
+    } catch {
+      // ignore
+    }
+
+    setIsFinishingSession(false);
+    setCompletionData({ readingMinutes, focusPercent });
+  }, [
+    canExitSession,
+    childId,
+    endSession,
+    isContentUnavailable,
+    selectedStory,
+    story?.contentId,
+    totalWords,
+    wordOffsetByPage,
+    exitBlockedMessage,
+  ]);
 
   const shouldShowDebugPanel = useMemo(() => {
     const queryValue = new URLSearchParams(location.search).get("debugTracking");
@@ -464,7 +955,21 @@ const ReadingPage = () => {
     <div className="reading-page-shell">
       <div className="reading-page">
         <header className="reading-header">
-          <h1 className="reading-title">{story.title}</h1>
+          <div className="reading-header-row">
+            <h1 className="reading-title">{story.title}</h1>
+
+            <button
+              type="button"
+              className="reading-exit-btn"
+              onClick={handleExitSession}
+              disabled={!canExitSession || isFinishingSession}
+              title={
+                !canExitSession && !isFinishingSession ? exitBlockedMessage : "Hoàn thành phiên đọc"
+              }
+            >
+              {isFinishingSession ? "Đang lưu..." : "Hoàn thành"}
+            </button>
+          </div>
         </header>
 
         {isLoading && <p className="reading-loading">Đang tải nội dung truyện...</p>}
@@ -507,7 +1012,7 @@ const ReadingPage = () => {
                 activeTooltip={activeTooltip}
                 onWordHoverStart={handleHoverSpeechStart}
                 onWordHoverEnd={handleHoverSpeechEnd}
-                onStoryPointerMove={handleStoryPointerMove}
+                onStoryPointerMove={handleReadingPointerMove}
                 onStoryPointerLeave={handleStoryPointerLeave}
                 onTooltipRendered={handleTooltipRendered}
               />
@@ -520,6 +1025,8 @@ const ReadingPage = () => {
               totalPages={totalPages}
               onPrevPage={() => setCurrentPage((prev) => Math.max(prev - 1, 0))}
               onNextPage={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages - 1))}
+              canGoNextOverride={canGoNextPage}
+              nextDisabledTitle={nextPageBlockedMessage}
             />
           </>
         )}
@@ -594,6 +1101,16 @@ const ReadingPage = () => {
           </aside>
         )}
       </div>
+
+      <ReadingCompletionModal
+        isOpen={completionData !== null}
+        readingMinutes={completionData?.readingMinutes ?? 0}
+        focusPercent={completionData?.focusPercent ?? 0}
+        onGoLibrary={() => {
+          setCompletionData(null);
+          navigate("/children/library", { replace: true });
+        }}
+      />
     </div>
   );
 };

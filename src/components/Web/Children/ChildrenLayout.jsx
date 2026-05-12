@@ -354,6 +354,7 @@ const ChildrenLayout = () => {
   return (
     <div className="children-page">
       <div className="children-home-page">
+        <div className="children-side-placeholder" aria-hidden="true" />
         <aside className="children-side">
           <div className="children-side-hero">
             {showStoreSidebar ? (
@@ -742,6 +743,7 @@ const ChildrenLayout = () => {
                   className={({ isActive }) =>
                     `children-nav-link ${isActive ? "is-active" : ""}`
                   }
+                  onClick={() => setStoreFilterOpen(false)}
                 >
                   Hồ sơ
                 </NavLink>
@@ -750,7 +752,10 @@ const ChildrenLayout = () => {
                   className={({ isActive }) =>
                     `children-nav-link ${isActive ? "is-active" : ""}`
                   }
-                  onClick={() => setSideStory(defaultSideStory)}
+                  onClick={() => {
+                    setStoreFilterOpen(false);
+                    setSideStory(defaultSideStory);
+                  }}
                 >
                   Thư viện
                 </NavLink>
@@ -761,6 +766,14 @@ const ChildrenLayout = () => {
                   }
                 >
                   Cửa hàng
+                </NavLink>
+                <NavLink
+                  to="/children/collection"
+                  className={({ isActive }) =>
+                    `children-nav-link ${isActive ? "is-active" : ""}`
+                  }
+                >
+                  Bộ sưu tập
                 </NavLink>
               </nav>
             </div>
@@ -773,13 +786,15 @@ const ChildrenLayout = () => {
                 className="children-coin-icon"
               />
 
-              <button
-                type="button"
-                className="children-logout-btn"
-                onClick={handleLogout}
-              >
-                Đăng xuất
-              </button>
+              {isProfileRoute && (
+                <button
+                  type="button"
+                  className="children-logout-btn"
+                  onClick={handleLogout}
+                >
+                  Đăng xuất
+                </button>
+              )}
             </div>
           </header>
 
@@ -788,6 +803,8 @@ const ChildrenLayout = () => {
               context={{
                 setSideStory,
                 resetSideStory: () => setSideStory(defaultSideStory),
+                balance,
+                setBalance,
               }}
             />
           </section>
