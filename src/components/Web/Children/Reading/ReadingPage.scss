@@ -247,7 +247,7 @@
   font-size: clamp(1.56rem, 2.8vw, 2.95rem);
   --reading-line-height: 1.36em;
   line-height: 1.36;
-  font-weight: 600;
+  font-weight: 400;
   text-align: justify;
   text-align-last: left;
   text-justify: inter-word;
@@ -256,22 +256,25 @@
   word-break: normal;
   transition: letter-spacing 0.5s ease-in-out, line-height 0.5s ease-in-out, color 0.3s ease;
 
-  &.intervention-active {
-    letter-spacing: 0.035em;
-    line-height: 1.56;
-  }
+  // intervention-active: layout không thay đổi — contrast qua font-weight.
 }
 
 .reading-word {
   display: inline;
-  transition: all 0.5s ease-in-out;
+  transition:
+    font-weight 380ms ease-in-out,
+    background-color 380ms ease-in-out,
+    box-shadow 380ms ease-in-out,
+    opacity 380ms ease-in-out;
 }
 
 .reading-word.intervention-target-word {
-  font-size: 1.08em;
   font-weight: 700;
-  letter-spacing: 0.085em;
-  transition: all 0.5s ease-in-out;
+  transition:
+    font-weight 380ms ease-in-out,
+    background-color 380ms ease-in-out,
+    box-shadow 380ms ease-in-out,
+    opacity 380ms ease-in-out;
 }
 
 .color-banding-active {

@@ -89,26 +89,6 @@ const ReadingBookView = ({
   const regressionWordIndex = wordIntervention?.regressionWordIndex ?? null;
   const regressionFocusRadius = wordIntervention?.regressionFocusRadius ?? 0;
 
-  // For LOOP: set of wordIndexes that should be dimmed (everything outside the focus zone).
-  const regressionDimIndexSet = useMemo(() => {
-    if (regressionType !== "LOOP" || !Number.isInteger(regressionWordIndex)) {
-      return null;
-    }
-
-    const focusMin = regressionWordIndex - regressionFocusRadius;
-    const focusMax = regressionWordIndex + regressionFocusRadius;
-
-    const dimSet = new Set();
-    pageTokens.forEach((token) => {
-      if (token.type !== "word" || !Number.isInteger(token.wordIndex)) return;
-      if (token.wordIndex < focusMin || token.wordIndex > focusMax) {
-        dimSet.add(token.wordIndex);
-      }
-    });
-
-    return dimSet;
-  }, [regressionType, regressionWordIndex, regressionFocusRadius, pageTokens]);
-
   // For STRONG: set of wordIndexes in the regression range to highlight as a block.
   const regressionRangeIndexSet = useMemo(() => {
     if (regressionType !== "STRONG" || !Number.isInteger(regressionWordIndex)) {
@@ -482,7 +462,6 @@ const ReadingBookView = ({
 
     const hoverText = hoverTextByWordIndex.get(wordIndex) || token.displayText || token.value;
 
-    const isRegressionLoopDim = regressionDimIndexSet?.has(wordIndex) ?? false;
     const isRegressionStrongRange = regressionRangeIndexSet?.has(wordIndex) ?? false;
     const isRegressionLoopFocus =
       regressionType === "LOOP" && wordIndex === regressionWordIndex;
@@ -506,7 +485,6 @@ const ReadingBookView = ({
         : "",
       isRegressionStrongRange ? "word-regression--strong" : "",
       isRegressionLoopFocus ? "word-regression--loop-focus" : "",
-      isRegressionLoopDim ? "word-regression--loop-dim" : "",
     ]
       .filter(Boolean)
       .join(" ");
