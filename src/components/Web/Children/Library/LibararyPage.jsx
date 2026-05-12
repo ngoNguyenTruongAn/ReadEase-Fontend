@@ -61,7 +61,8 @@ const LibararyPage = () => {
       title: story.title,
       coverUrl: story.coverUrl,
       description:
-        story.description || "Ngày xưa, ở một làng nọ, có một anh nông phu nghèo.",
+        story.description ||
+        "Ngày xưa, ở một làng nọ, có một anh nông phu nghèo.",
     };
 
     setSideStory?.({
@@ -94,7 +95,9 @@ const LibararyPage = () => {
             <div
               className="library-card-cover"
               style={
-                story.coverUrl ? { backgroundImage: `url(${story.coverUrl})` } : {}
+                story.coverUrl
+                  ? { backgroundImage: `url(${story.coverUrl})` }
+                  : {}
               }
             />
           </button>
