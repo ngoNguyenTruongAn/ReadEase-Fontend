@@ -38,6 +38,7 @@ const createWeeklyReport = async (childId) => {
 const getReportChildById = async (childId) => {
   try {
     const response = await instance.get(`reports/${childId}`);
+    console.log("[GuardianAPI.getReportChildById]", { childId, data: response.data });
     return response.data;
   } catch (error) {
     logApiError(error, "GuardianAPI.getReportChildById");

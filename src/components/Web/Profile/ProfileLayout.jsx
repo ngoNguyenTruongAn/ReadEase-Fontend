@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import AuthAPI from "../../../service/Auth/AuthAPI";
-import knightImg from "../../../assets/image/Friendly monster waving a flag 1.png";
-import mageImg from "../../../assets/image/reading book and sitting on the grass 1.png";
+import ChildrenAPI from "../../../service/Children/ChildrenAPI";
 import "./ProfileLayout.scss";
+
+const TINTS = ["mint", "lavender", "peach", "coral", "sky"];
 
 const pickProfile = (data) => {
   const root = data?.data ?? data?.user ?? data;
+
   return {
     id: root?.id ?? root?.userId ?? data?.id,
     email: root?.email ?? data?.email,
@@ -14,7 +17,10 @@ const pickProfile = (data) => {
 };
 
 const ProfileLayout = () => {
-  const [profile, setProfile] = useState(null);
+  const navigate = useNavigate();
+
+  const [_profile, setProfile] = useState(null);
+  const [collection, setCollection] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -24,18 +30,38 @@ const ProfileLayout = () => {
     const load = async () => {
       setLoading(true);
       setError("");
+
       try {
-        const data = await AuthAPI.getProfileAPI();
-        if (!cancelled) setProfile(pickProfile(data));
+        const profileData = await AuthAPI.getProfileAPI();
+
+        if (cancelled) return;
+
+        const parsedProfile = pickProfile(profileData);
+
+        setProfile(parsedProfile);
+
+        const childId = localStorage.getItem("childId") || parsedProfile?.id;
+
+        if (!childId) return;
+
+        const collectionRes = await ChildrenAPI.getCollection(childId);
+
+        if (cancelled) return;
+
+        const items = collectionRes?.data?.items ?? [];
+
+        setCollection(items.slice(0, 6));
       } catch (err) {
         if (!cancelled) {
           const body = err?.response?.data;
+
           const message =
             (typeof body?.message === "string" && body.message) ||
             (Array.isArray(body?.message) && body.message.join(", ")) ||
             body?.error ||
             err?.message ||
             "Không tải được hồ sơ.";
+
           setError(message);
         }
       } finally {
@@ -44,194 +70,91 @@ const ProfileLayout = () => {
     };
 
     load();
+
     return () => {
       cancelled = true;
     };
   }, []);
 
   if (loading) {
-    return <div>Đang tải hồ sơ...</div>;
+    return <div className="profile-loading">Đang tải bộ sưu tập...</div>;
   }
 
   if (error) {
-    return <div role="alert">{error}</div>;
+    return (
+      <div className="profile-error" role="alert">
+        {error}
+      </div>
+    );
   }
-
-  // Dữ liệu hồ sơ hiện chưa hiển thị trực tiếp trong UI (phần meta đang comment),
-  // nhưng giữ lại để sau này mở rộng nhanh mà không phải gọi lại API.
-  const { id: _id, email: _email, role: _role } = profile ?? {};
-  const achievements = [
-    {
-      id: "fire",
-      icon: "🔥",
-      title: "Người giữ lửa (cấp 1)",
-      score: "18/30",
-      ratio: 60,
-      subtitle: "Đạt chuỗi ngày 18 streaks",
-    },
-    {
-      id: "enthusiasm",
-      icon: "✨",
-      title: "Nhà tài phiệt (cấp 1)",
-      score: "80/100",
-      ratio: 80,
-      subtitle: "Đạt chuỗi ngày 18 streaks",
-    },
-    {
-      id: "insight",
-      icon: "🔮",
-      title: "Nhà thông thái (cấp 1)",
-      score: "1/5",
-      ratio: 20,
-      subtitle: "Đạt chuỗi ngày 18 streaks",
-    },
-    {
-      id: "insight",
-      icon: "🔮",
-      title: "Nhà thông thái (cấp 1)",
-      score: "1/5",
-      ratio: 20,
-      subtitle: "Đạt chuỗi ngày 18 streaks",
-    },
-    {
-      id: "insight",
-      icon: "🔮",
-      title: "Nhà thông thái (cấp 1)",
-      score: "1/5",
-      ratio: 20,
-      subtitle: "Đạt chuỗi ngày 18 streaks",
-    },
-    {
-      id: "insight",
-      icon: "🔮",
-      title: "Nhà thông thái (cấp 1)",
-      score: "1/5",
-      ratio: 20,
-      subtitle: "Đạt chuỗi ngày 18 streaks",
-    },
-    {
-      id: "insight",
-      icon: "🔮",
-      title: "Nhà thông thái (cấp 1)",
-      score: "1/5",
-      ratio: 20,
-      subtitle: "Đạt chuỗi ngày 18 streaks",
-    },
-    {
-      id: "insight",
-      icon: "🔮",
-      title: "Nhà thông thái (cấp 1)",
-      score: "1/5",
-      ratio: 20,
-      subtitle: "Đạt chuỗi ngày 18 streaks",
-    },
-    {
-      id: "insight",
-      icon: "🔮",
-      title: "Nhà thông thái (cấp 1)",
-      score: "1/5",
-      ratio: 20,
-      subtitle: "Đạt chuỗi ngày 18 streaks",
-    },
-    {
-      id: "insight",
-      icon: "🔮",
-      title: "Nhà thông thái (cấp 1)",
-      score: "1/5",
-      ratio: 20,
-      subtitle: "Đạt chuỗi ngày 18 streaks",
-    },
-    {
-      id: "insight",
-      icon: "🔮",
-      title: "Nhà thông thái (cấp 1)",
-      score: "1/5",
-      ratio: 20,
-      subtitle: "Đạt chuỗi ngày 18 streaks",
-    },
-    {
-      id: "insight 999",
-      icon: "🔮",
-      title: "Nhà thông thái (cấp 1)",
-      score: "1/5",
-      ratio: 20,
-      subtitle: "Đạt chuỗi ngày 18 streaks",
-    },
-  ];
-
-  const topAchievements = achievements.slice(0, 5);
-
-  const collection = [
-    { id: "c1", image: knightImg, name: "Kỵ sĩ ánh sáng" },
-    { id: "c2", image: mageImg, name: "Người chăn thú" },
-    { id: "c3", image: knightImg, name: "Linh mục hoàng kim" },
-    { id: "c4", image: knightImg, name: "Linh mục hoàng kim" },
-    { id: "c5", image: knightImg, name: "Linh mục hoàng kim" },
-    { id: "c6", image: knightImg, name: "Linh mục hoàng kim" },
-  ];
 
   return (
     <div className="profile-layout">
-      <section className="profile-achievement">
-        <h2 className="profile-section-title">
-          Thành tích{" "}
-          <span style={{ fontWeight: "bold", color: "#FBBF24" }}> Top 5</span>
-        </h2>
-
-        <div className="profile-achievement-card">
-          {topAchievements.map((item, index) => (
-            <div
-              key={`${item.id}-${index}`}
-              className={`profile-achievement-item ${
-                index < topAchievements.length - 1 ? "with-divider" : ""
-              }`}
-            >
-              <div className="profile-achievement-icon" aria-hidden="true">
-                {item.icon}
-              </div>
-
-              <div className="profile-achievement-body">
-                <div className="profile-achievement-head">
-                  <h3>{item.title}</h3>
-                  <span>{item.score}</span>
-                </div>
-
-                <div className="profile-progress-track">
-                  <div
-                    className="profile-progress-fill"
-                    style={{ width: `${item.ratio}%` }}
-                  />
-                </div>
-
-                <p>{item.subtitle}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
       <section className="profile-collection">
         <div className="profile-collection-header">
-          <h2 className="profile-section-title">Bộ sưu tập</h2>
-          <button type="button" className="profile-view-all">
+          <div className="profile-collection-intro">
+            <h2 className="profile-section-title">🏆 Bộ sưu tập</h2>
+
+            <p className="profile-section-subtitle">
+              Những vật phẩm bạn đã sưu tập được
+            </p>
+          </div>
+
+          <button
+            type="button"
+            className="profile-view-all"
+            onClick={() => navigate("/children/collection")}
+          >
             Xem tất cả
           </button>
         </div>
 
-        <div className="profile-collection-grid">
-          {collection.map((item) => (
-            <article key={item.id} className="profile-collection-card">
-              <img src={item.image} alt={item.name} />
-            </article>
-          ))}
-        </div>
-      </section>
+        {collection.length === 0 ? (
+          <div className="profile-empty">
+            <div className="profile-empty-icon">📦</div>
 
-      {/* <div className="profile-meta">
-        <span>ID: {id != null ? String(id) : "—"}</span>
-        <span>Email: {email ?? "—"}</span>
-        <span>Vai trò: {role != null ? String(role) : "—"}</span>
-      </div> */}
+            <h3>Chưa có vật phẩm nào</h3>
+
+            <p>Hãy ghé cửa hàng và đổi thưởng để bắt đầu bộ sưu tập nhé!</p>
+
+            <button
+              type="button"
+              className="profile-empty-btn"
+              onClick={() => navigate("/children/store")}
+            >
+              Đến cửa hàng 🎁
+            </button>
+          </div>
+        ) : (
+          <div className="profile-collection-grid">
+            {collection.map((item, idx) => {
+              const tint = TINTS[idx % TINTS.length];
+
+              return (
+                <article
+                  key={item.reward_id}
+                  className={`profile-collection-card profile-collection-card--${tint}`}
+                >
+                  {item.quantity > 1 && (
+                    <span className="profile-badge">x{item.quantity}</span>
+                  )}
+
+                  <div className="profile-card-art">
+                    <img
+                      src={item.image_url}
+                      alt={item.name}
+                      className="profile-card-img"
+                      loading="lazy"
+                    />
+                  </div>
+
+                  <span className="profile-card-name">{item.name}</span>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
 };
