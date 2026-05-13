@@ -1,0 +1,84 @@
+@use "../../../../styles/variables" as *;
+
+.gwrd {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.gwrd-top {
+  display: flex;
+  align-items: center;
+}
+
+.gwrd-back {
+  display: inline-flex;
+  align-items: center;
+  font-weight: 900;
+  color: $primary-color;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.gwrd-muted {
+  color: $text-secondary;
+  font-weight: 650;
+}
+
+.gwrd-alert {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(220, 38, 38, 0.08);
+  color: #b42318;
+  font-weight: 700;
+}
+
+.gwrd-card {
+  background: rgba(255, 255, 255, 0.88);
+  border-radius: 18px;
+  padding: 18px 16px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.05);
+}
+
+.gwrd-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 950;
+  color: $text-main;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.gwrd-meta {
+  margin: 10px 0 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: rgba($text-main, 0.55);
+}
+
+.gwrd-body {
+  margin-top: 16px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+  color: $text-main;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.gwrd-json {
+  margin: 16px 0 0;
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.04);
+  font-size: 0.82rem;
+  overflow: auto;
+  max-height: min(70vh, 560px);
+  line-height: 1.45;
+}

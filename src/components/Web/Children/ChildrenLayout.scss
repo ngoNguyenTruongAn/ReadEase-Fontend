@@ -700,6 +700,7 @@ $children-layout-gap: 44px;
 
 .children-content {
   flex: 1;
+  min-width: 0;
   padding: 24px 0;
   overflow-y: auto;
   overscroll-behavior: contain;

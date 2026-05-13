@@ -7,7 +7,6 @@ import SelectRolePage from "./components/Login/RegisterPage/SelectRolePage/Selec
 import ChildrenLayout from "./components/Web/Children/ChildrenLayout";
 import LibararyPage from "./components/Web/Children/Library/LibararyPage";
 import StorePage from "./components/Web/Children/Store/StorePage";
-import CollectionPage from "./components/Web/Children/Collection/CollectionPage";
 import ProfileLayout from "./components/Web/Profile/ProfileLayout";
 import CalibrationStartPage from "./components/Web/Children/CalibrationStart/CalibrationStartPage";
 import ReadingPage from "./components/Web/Children/Reading/ReadingPage";
@@ -17,6 +16,8 @@ import { ToastContainer } from "react-toastify";
 import GuardianLayout from "./components/Web/Guardian/GuardianLayout";
 import DashboardGuardian from "./components/Web/Guardian/DashboardGuardian/DashboardGuardian";
 import Children from "./components/Web/Guardian/Children/Children";
+import GuardianReports from "./components/Web/Guardian/WeeklyReports/GuardianReports";
+import GuardianReportDetail from "./components/Web/Guardian/WeeklyReports/GuardianReportDetail";
 import ClinicianLayout from "./components/Web/Clinician/ClinicianLayout";
 import DashboardClinician from "./components/Web/Clinician/DashboardClinician/DashboardClinician";
 import Patients from "./components/Web/Clinician/Patients/Patients";
@@ -46,7 +47,6 @@ function App() {
           <Route path="/children/profile" element={<ProfileLayout />} />
           <Route path="/children/library" element={<LibararyPage />} />
           <Route path="/children/store" element={<StorePage />} />
-          <Route path="/children/collection" element={<CollectionPage />} />
         </Route>
 
         {/* standalone calibration */}
@@ -61,6 +61,11 @@ function App() {
         <Route path="/guardian" element={<GuardianLayout />}>
           <Route path="/guardian" element={<DashboardGuardian />} />
           <Route path="/guardian/children" element={<Children />} />
+          <Route path="/guardian/reports" element={<GuardianReports />} />
+          <Route
+            path="/guardian/reports/:reportId"
+            element={<GuardianReportDetail />}
+          />
         </Route>
 
         {/* clinician */}

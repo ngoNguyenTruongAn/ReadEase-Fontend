@@ -177,6 +177,9 @@
   font-weight: 900;
   cursor: pointer;
   padding: 0;
+  text-decoration: none;
+  font-size: inherit;
+  font-family: inherit;
 
   &:hover {
     text-decoration: underline;

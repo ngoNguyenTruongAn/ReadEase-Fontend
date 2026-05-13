@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import "./DashboardGuardian.scss";
 import readingBook from "../../../../assets/image/Vector.png";
 
@@ -74,7 +75,9 @@ const DashboardGuardian = () => {
 
               <div className="gdg-item__right">
                 <div className="gdg-item__status">{r.status}</div>
-                <button className="gdg-item__link">Xem chi tiết</button>
+                <Link className="gdg-item__link" to="/guardian/reports">
+                  Xem chi tiết
+                </Link>
               </div>
             </div>
           ))}

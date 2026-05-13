@@ -43,12 +43,12 @@ const GuardianLayout = () => {
               </NavLink>
 
               <NavLink
-                to="/guardian/analytics"
+                to="/guardian/reports"
                 className={({ isActive }) =>
                   `guardian-nav-link ${isActive ? "is-active" : ""}`
                 }
               >
-                Chi tiết
+                Báo cáo tuần
               </NavLink>
 
               <NavLink
