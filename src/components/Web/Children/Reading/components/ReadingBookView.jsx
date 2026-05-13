@@ -146,6 +146,12 @@ const ReadingBookView = ({
   const regressionWordIndex = wordIntervention?.regressionWordIndex ?? null;
   const regressionFocusRadius = wordIntervention?.regressionFocusRadius ?? 0;
 
+  // ← log sự kiện
+  useEffect(() => {
+    if (!wordIntervention) return;
+    console.log("[RegressionDebug]", Date().now, JSON.stringify(wordIntervention, null, 2));
+  }, [wordIntervention]);
+
   // For STRONG: set of wordIndexes in the regression range to highlight as a block.
   const regressionRangeIndexSet = useMemo(() => {
     if (regressionType !== "STRONG" || !Number.isInteger(regressionWordIndex)) {
@@ -572,16 +578,16 @@ const ReadingBookView = ({
         {activeTooltip?.visible &&
           activeTooltip?.anchorType !== "cursor" &&
           activeTooltip?.wordIndex === wordIndex && (
-          <span className="reading-inline-tooltip-anchor">
-            <span className="reading-intervention-tooltip" role="status" aria-live="polite">
-              {activeTooltip?.original && (
-                <span className="reading-tooltip-original">{activeTooltip.original}</span>
-              )}
-              {activeTooltip?.simplified && (
-                <span className="reading-tooltip-simplified">{activeTooltip.simplified}</span>
-              )}
+            <span className="reading-inline-tooltip-anchor">
+              <span className="reading-intervention-tooltip" role="status" aria-live="polite">
+                {activeTooltip?.original && (
+                  <span className="reading-tooltip-original">{activeTooltip.original}</span>
+                )}
+                {activeTooltip?.simplified && (
+                  <span className="reading-tooltip-simplified">{activeTooltip.simplified}</span>
+                )}
+              </span>
             </span>
-          </span>
           )}
       </span>
     );
