@@ -259,14 +259,14 @@
   // intervention-active: layout không thay đổi — contrast qua font-weight.
 }
 
-// Bionic Reading: dùng text-shadow thay font-weight để tạo độ đậm thị giác
-// mà không thay đổi character width → justify layout giữ nguyên khi bật/tắt.
+// Bionic Reading: dùng offset shadow thay vì font-weight để tạo độ đậm
+// mà không thay đổi character width → justify layout không reflow.
+// blur-radius: 0 → shadow sắc nét, không nhòe như blur > 0.
 .reading-book-text strong {
   font-weight: inherit;
   text-shadow:
-    0 0 1.2px currentColor,
-    0 0 1.2px currentColor,
-    0 0 1.2px currentColor;
+    0.8px 0 0 currentColor,
+    -0.8px 0 0 currentColor;
 }
 
 .reading-word {
