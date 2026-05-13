@@ -218,6 +218,9 @@ const useReadingDualInterventionSession = ({
   const distractionTimerRef = useRef(null);
   const lastAckedTooltipIdRef = useRef("");
   const currentWordIndexRef = useRef(null);
+  // Track từ đang được can thiệp hiện tại — dùng để cho phép interrupt cooldown
+  // khi signal mới nhắm vào một từ khác hẳn từ đang active.
+  const activeInterventionWordIndexRef = useRef(null);
   const resolveTooltipByWordIndexRef = useRef(resolveTooltipByWordIndex);
   const onAdaptationStateRef = useRef(onAdaptationState);
   const sessionIdRef = useRef("");
@@ -366,6 +369,7 @@ const useReadingDualInterventionSession = ({
 
   const resetFluentUi = useCallback(() => {
     pendingAdaptationRef.current = null;
+    activeInterventionWordIndexRef.current = null;
     setVisualFlags(INITIAL_VISUAL_FLAGS);
     setWordIntervention(INITIAL_WORD_INTERVENTION);
     setActiveTooltip(null);
@@ -468,9 +472,21 @@ const useReadingDualInterventionSession = ({
       if (!localFallbackAllowedRef.current) return;
 
       const now = Date.now();
-      if (now - localFallbackSignalRef.current.lastTriggeredAt < LOCAL_FALLBACK_COOLDOWN_MS) {
-        return;
-      }
+      const timeSinceLast = now - localFallbackSignalRef.current.lastTriggeredAt;
+
+      // Cho phép interrupt sớm nếu signal mới nhắm vào từ khác hẳn từ đang active —
+      // giữ min 800ms để tránh flicker khi chuột đi qua liên tục.
+      // Nếu cùng từ thì vẫn giữ cooldown đầy đủ để tránh re-trigger dư thừa.
+      const resolvedWordIndex = Number.isInteger(wordIndex) && wordIndex >= 0 ? wordIndex : null;
+      const isDifferentWord =
+        resolvedWordIndex !== null &&
+        resolvedWordIndex !== activeInterventionWordIndexRef.current;
+      const MIN_INTERRUPT_GAP_MS = 800;
+
+      const cooldownPassed = timeSinceLast >= LOCAL_FALLBACK_COOLDOWN_MS;
+      const allowEarlyInterrupt = isDifferentWord && timeSinceLast >= MIN_INTERRUPT_GAP_MS;
+
+      if (!cooldownPassed && !allowEarlyInterrupt) return;
 
       localFallbackSignalRef.current.lastTriggeredAt = now;
 
@@ -494,7 +510,7 @@ const useReadingDualInterventionSession = ({
         }),
       );
 
-      const resolvedWordIndex = Number.isInteger(wordIndex) && wordIndex >= 0 ? wordIndex : null;
+      // resolvedWordIndex đã được khai báo ở đầu hàm (trước cooldown check).
 
       // Classify LOOP nếu có đủ direction changes (di qua lại vùng hẹp),
       // còn lại là STRONG/MILD dựa trên backtrackDelta.
@@ -540,6 +556,7 @@ const useReadingDualInterventionSession = ({
       //   timeSinceLastTrigger: Date.now() - localFallbackSignalRef.current.lastTriggeredAt,
       // });
 
+      activeInterventionWordIndexRef.current = resolvedWordIndex;
       setWordIntervention((previous) => ({
         ...previous,
         distractionWordIndex: null,
@@ -856,6 +873,7 @@ const useReadingDualInterventionSession = ({
           distractionWordIndex: null,
           semanticWordIndex: payload.wordIndex ?? null,
         }));
+        activeInterventionWordIndexRef.current = payload.wordIndex ?? null;
       } else {
         setWordIntervention((previous) => ({
           ...previous,
@@ -866,6 +884,8 @@ const useReadingDualInterventionSession = ({
             payload.state === ADAPTATION_STATES.DISTRACTION ? payload.wordIndex : null,
           semanticWordIndex: null,
         }));
+        activeInterventionWordIndexRef.current =
+          payload.state === ADAPTATION_STATES.DISTRACTION ? (payload.wordIndex ?? null) : null;
       }
 
       if (payload.state === ADAPTATION_STATES.DISTRACTION) {
