@@ -271,37 +271,41 @@
 
 .reading-word {
   display: inline;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
   transition:
-    font-weight 380ms ease-in-out,
     background-color 380ms ease-in-out,
     box-shadow 380ms ease-in-out,
     opacity 380ms ease-in-out;
 }
 
 .reading-word.intervention-target-word {
-  font-weight: 700;
+  border-radius: 0.16em;
+  background-color: rgb(20 184 166 / var(--reading-intervention-word-band, 0.28));
+  box-shadow: 0 0 0 0.09em rgb(20 184 166 / var(--reading-intervention-word-ring, 0.34));
+  font-weight: inherit;
+  text-decoration: none;
   transition:
-    font-weight 380ms ease-in-out,
     background-color 380ms ease-in-out,
     box-shadow 380ms ease-in-out,
     opacity 380ms ease-in-out;
 }
 
 .color-banding-active {
-  background-color: #f0fdfa;
+  background-color: rgb(74 227 208 / var(--reading-color-banding-strong, 0.13));
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
   transition: background-color 0.4s ease;
 }
 
 .color-banding-active.line-banding-start {
   border-top-left-radius: 8px;
   border-bottom-left-radius: 8px;
-  padding-left: 4px;
 }
 
 .color-banding-active.line-banding-end {
   border-top-right-radius: 8px;
   border-bottom-right-radius: 8px;
-  padding-right: 4px;
 }
 
 .reading-word-space {
@@ -449,28 +453,22 @@
 // Applied alongside word-regression-focus / word-regression--strong etc.
 // Each type is additive and does not override existing intervention styles.
 
-// MILD: subtle underline only — non-distracting, signals "you passed here twice"
+// MILD: use the same paint-only target band; no underline or metric changes.
 .word-regression--mild {
-  text-decoration: underline;
-  text-decoration-color: rgba(#f59e0b, 0.55);
-  text-decoration-thickness: 2px;
-  text-underline-offset: 4px;
-  background: none;
-  box-shadow: none;
+  text-decoration: none;
   transition:
-    text-decoration-color 0.3s ease,
-    background 0.3s ease;
+    background-color 0.3s ease,
+    box-shadow 0.3s ease;
 }
 
-// STRONG: reuses intervention-target-word visual (bold + letter-spacing) applied
-// via JS — no extra background or color needed here, color-banding handles the line.
+// STRONG: reuses intervention-target-word visual via JS; color-banding handles the line.
 
 // LOOP — focus word: elevated, visible
 .word-regression--loop-focus {
   background: rgba(#f59e0b, 0.26);
   border-radius: 7px;
   box-shadow: 0 0 0 2px rgba(#f59e0b, 0.4);
-  font-weight: 700;
+  font-weight: inherit;
   transition:
     background 0.35s ease,
     box-shadow 0.35s ease,
@@ -488,6 +486,15 @@
   border-radius: 6px;
 }
 
+.reading-book-text.intervention-active .reading-word.intervention-target-word {
+  border-radius: 0.16em;
+  background-color: rgb(20 184 166 / var(--reading-intervention-word-band, 0.28));
+  box-shadow: 0 0 0 0.09em rgb(20 184 166 / var(--reading-intervention-word-ring, 0.34));
+  animation: none;
+  font-weight: inherit;
+  text-decoration: none;
+}
+
 @keyframes reading-word-distract-hint {
   0% {
     box-shadow: 0 0 0 0 rgba(#f59e0b, 0.2);
@@ -501,6 +508,7 @@
   left: 50%;
   bottom: calc(100% + 10px);
   position: absolute;
+  pointer-events: none;
   transform: translate(-50%, 0);
   z-index: 5;
   min-width: 160px;

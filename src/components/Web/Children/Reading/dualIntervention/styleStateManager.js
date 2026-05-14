@@ -161,12 +161,23 @@ export const createVisualFlagsFromAdaptation = ({
 export const createVisualStyleVars = (visualFlags) => {
   if (!visualFlags?.isVisualActive) return {};
 
+  const colorBandingStrength = visualFlags.colorBandingStrength ?? 0.13;
+  const interventionWordBandStrength = clamp(
+    Math.max(colorBandingStrength * 1.75, colorBandingStrength + 0.1),
+    0.18,
+    0.46,
+  );
+
   return {
     "--reading-letter-spacing": `${visualFlags.letterSpacingEm ?? 0.055}em`,
     "--reading-transition-ms": `${visualFlags.transitionMs ?? 200}ms`,
-    "--reading-color-banding-strong": String(visualFlags.colorBandingStrength ?? 0.13),
+    "--reading-color-banding-strong": String(colorBandingStrength),
     "--reading-color-banding-soft": String(
-      Math.max((visualFlags.colorBandingStrength ?? 0.13) * 0.36, 0.02),
+      Math.max(colorBandingStrength * 0.36, 0.02),
+    ),
+    "--reading-intervention-word-band": String(interventionWordBandStrength),
+    "--reading-intervention-word-ring": String(
+      clamp(interventionWordBandStrength + 0.08, 0.22, 0.54),
     ),
     "--reading-invert-strength": String(visualFlags.invertedStrength ?? 0),
     "--reading-contrast-boost": String(visualFlags.contrastBoost ?? 1),

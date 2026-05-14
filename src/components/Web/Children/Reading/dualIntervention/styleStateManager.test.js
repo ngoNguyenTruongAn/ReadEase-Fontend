@@ -27,6 +27,9 @@ describe("styleStateManager", () => {
     const styleVars = createVisualStyleVars(flags);
     expect(styleVars["--reading-letter-spacing"]).toBe("0.06em");
     expect(styleVars["--reading-transition-ms"]).toBe("180ms");
+    expect(Number(styleVars["--reading-intervention-word-band"])).toBeGreaterThan(
+      Number(styleVars["--reading-color-banding-strong"]),
+    );
   });
 
   it("enables deep inverted defaults for regression dual intervention", () => {
