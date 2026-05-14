@@ -19,9 +19,6 @@ const Children = () => {
       { key: "is_active", label: "Kích hoạt" },
       { key: "created_at", label: "Ngày tạo" },
       { key: "consent_given_at", label: "Xác nhận lúc" },
-      { key: "consent_type", label: "Kiểu xác nhận" },
-      { key: "date_of_birth", label: "Ngày sinh" },
-      { key: "grade_level", label: "Khối lớp" },
     ],
     [],
   );
