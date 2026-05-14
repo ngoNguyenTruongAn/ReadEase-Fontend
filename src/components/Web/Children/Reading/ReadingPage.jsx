@@ -3,15 +3,13 @@ import { useLocation, useNavigate } from "react-router-dom";
 import instance from "../../../../app/instance";
 import ContenAPI from "../../../../service/Contents/ContenAPI";
 import AuthAPI from "../../../../service/Auth/AuthAPI";
+import ChildrenAPI from "../../../../service/Children/ChildrenAPI";
 import ReadingAssistControls from "./components/ReadingAssistControls";
 import ReadingBookView from "./components/ReadingBookView";
 import ReadingPagination from "./components/ReadingPagination";
 import ReadingScorePanel from "./components/ReadingScorePanel";
 import useReadingDualInterventionSession from "./dualIntervention/hooks/useReadingDualInterventionSession";
-import {
-  countHybridVietnameseWords,
-  extractHybridVietnameseWordEntries,
-} from "./dualIntervention/tokenization/hybridVietnameseSegmentation";
+import { countHybridVietnameseWords } from "./dualIntervention/tokenization/hybridVietnameseSegmentation";
 import useHoverSpeech from "./hooks/useHoverSpeech";
 import {
   buildUnavailableStoryPayload,
@@ -53,6 +51,105 @@ const getStoredAccessToken = () =>
   "";
 
 const normalizeProfilePayload = (payload) => payload?.data ?? payload?.user ?? payload ?? {};
+
+const toFiniteNumberOrNull = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const resolveProfileScore = (profile) => {
+  const candidates = [
+    profile?.starPoint,
+    profile?.star_point,
+    profile?.score,
+    profile?.points,
+    profile?.point,
+    profile?.balance,
+    profile?.tokenBalance,
+    profile?.token_balance,
+    profile?.wallet?.balance,
+    profile?.tokens?.balance,
+  ];
+
+  for (const candidate of candidates) {
+    const value = toFiniteNumberOrNull(candidate);
+    if (value !== null) return value;
+  }
+
+  return null;
+};
+
+const normalizeAssetUrl = (value) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
+
+  try {
+    const baseUrl = instance?.defaults?.baseURL || window.location.origin;
+    const base = new URL(baseUrl, window.location.origin);
+    if (raw.startsWith("/")) {
+      return `${base.origin}${raw}`;
+    }
+    return new URL(raw, base).toString();
+  } catch {
+    return raw;
+  }
+};
+
+const resolveProfileAvatarUrl = (profile) => {
+  const candidates = [
+    profile?.avatarUrl,
+    profile?.avatar_url,
+    profile?.avatar,
+    profile?.profileImage,
+    profile?.profile_image,
+    profile?.profileImageUrl,
+    profile?.profile_image_url,
+    profile?.imageUrl,
+    profile?.image_url,
+    profile?.image,
+    profile?.photoUrl,
+    profile?.photo_url,
+    profile?.picture,
+    profile?.pictureUrl,
+    profile?.picture_url,
+    profile?.user?.avatarUrl,
+    profile?.user?.avatar_url,
+    profile?.user?.avatar,
+    profile?.user?.profileImage,
+    profile?.user?.profile_image,
+    profile?.child?.avatarUrl,
+    profile?.child?.avatar_url,
+    profile?.child?.avatar,
+    profile?.child?.profileImage,
+    profile?.child?.profile_image,
+  ];
+
+  for (const candidate of candidates) {
+    const avatar = normalizeAssetUrl(candidate);
+    if (avatar) return avatar;
+  }
+
+  return "";
+};
+
+const resolveBalancePayload = (payload) => {
+  const candidates = [
+    payload?.data?.balance,
+    payload?.balance,
+    payload?.data?.tokenBalance,
+    payload?.tokenBalance,
+    payload?.data?.score,
+    payload?.score,
+  ];
+
+  for (const candidate of candidates) {
+    const value = toFiniteNumberOrNull(candidate);
+    if (value !== null) return value;
+  }
+
+  return null;
+};
 
 const toDebugTime = (timestamp) => {
   if (!Number.isFinite(timestamp) || timestamp <= 0) return "--";
@@ -281,17 +378,38 @@ const ReadingPage = () => {
 
         const profile = normalizeProfilePayload(profilePayload);
         const resolvedChildId = String(
-          profile?.id || profile?._id || profile?.user_id || "",
+          profile?.id ||
+            profile?._id ||
+            profile?.user_id ||
+            profile?.childId ||
+            profile?.child_id ||
+            profile?.child?.id ||
+            "",
         ).trim();
         setChildId(resolvedChildId);
-        setAvatarUrl(
-          profile?.avatarUrl ||
-            profile?.avatar ||
-            profile?.profileImage ||
-            profile?.image ||
-            "",
-        );
-        setScore(Number(profile?.starPoint ?? profile?.score ?? 0) || 0);
+        if (resolvedChildId) {
+          localStorage.setItem("childId", resolvedChildId);
+        }
+        setAvatarUrl(resolveProfileAvatarUrl(profile));
+
+        const profileScore = resolveProfileScore(profile);
+        if (profileScore !== null) {
+          setScore(profileScore);
+        }
+
+        if (resolvedChildId) {
+          try {
+            const balancePayload = await ChildrenAPI.getBalance(resolvedChildId);
+            if (!isMounted) return;
+
+            const balanceScore = resolveBalancePayload(balancePayload);
+            if (balanceScore !== null) {
+              setScore(balanceScore);
+            }
+          } catch (balanceError) {
+            console.error("Failed to load reading score balance:", balanceError);
+          }
+        }
 
         setAuthStatus("authenticated");
         setAuthDebug((previous) => ({
@@ -538,25 +656,6 @@ const ReadingPage = () => {
   const safeCurrentPage = Math.min(currentPage, totalPages - 1);
   const pageText = renderedStoryPages.pages[safeCurrentPage] ?? "";
   const pageSegmentedText = renderedStoryPages.segmentedPages?.[safeCurrentPage] ?? pageText;
-  const pageWordEntries = useMemo(
-    () => extractHybridVietnameseWordEntries(pageSegmentedText),
-    [pageSegmentedText],
-  );
-
-  const resolveTooltipByWordIndex = useCallback(
-    (wordIndex) => {
-      if (!Number.isInteger(wordIndex) || wordIndex < 0) return null;
-      const wordEntry = pageWordEntries[wordIndex];
-      if (!wordEntry) return null;
-
-      return {
-        original: wordEntry.value,
-        simplified: wordEntry.value,
-        word: wordEntry.value,
-      };
-    },
-    [pageWordEntries],
-  );
 
   const pageWordCounts = useMemo(() => {
     const pages = Array.isArray(renderedStoryPages?.segmentedPages)
@@ -595,11 +694,9 @@ const ReadingPage = () => {
   const {
     visualFlags,
     wordIntervention,
-    activeTooltip,
     trackingDebug,
     handleStoryPointerMove,
     handleStoryPointerLeave,
-    handleTooltipRendered,
     endSession,
   } = useReadingDualInterventionSession({
     enabled:
@@ -607,7 +704,6 @@ const ReadingPage = () => {
     contentId:
       story?.contentId ?? selectedStory?.id ?? selectedStory?._id ?? selectedStory?.storyId,
     apiBaseUrl: instance?.defaults?.baseURL,
-    resolveTooltipByWordIndex,
     onAdaptationState: useCallback(
       (event) => {
         if (!event) return;
@@ -909,7 +1005,13 @@ const ReadingPage = () => {
     })();
 
     try {
-      endSession?.();
+      endSession?.({
+        kind: "reading-session",
+        childId,
+        contentId:
+          story?.contentId ?? selectedStory?.id ?? selectedStory?._id ?? selectedStory?.storyId,
+        summary,
+      });
     } catch {
       // ignore
     }
@@ -921,6 +1023,7 @@ const ReadingPage = () => {
     childId,
     endSession,
     isContentUnavailable,
+    navigate,
     selectedStory,
     story?.contentId,
     totalWords,
@@ -942,16 +1045,14 @@ const ReadingPage = () => {
       isVisualActive: Boolean(visualFlags?.isVisualActive),
       visualMode: visualFlags?.mode || "NONE",
       adaptationState: visualFlags?.state || "FLUENT",
-      tooltipVisible: Boolean(activeTooltip?.visible),
-      tooltipAnchor: activeTooltip?.anchorType || "none",
-      tooltipWordIndex: Number.isInteger(activeTooltip?.wordIndex)
-        ? activeTooltip.wordIndex
-        : null,
+      tooltipVisible: false,
+      tooltipAnchor: "disabled",
+      tooltipWordIndex: null,
       distractionWordIndex: wordIntervention?.distractionWordIndex ?? null,
       regressionWordIndex: wordIntervention?.regressionWordIndex ?? null,
       semanticWordIndex: wordIntervention?.semanticWordIndex ?? null,
     }),
-    [activeTooltip, visualFlags, wordIntervention],
+    [visualFlags, wordIntervention],
   );
 
   return (
@@ -1012,12 +1113,10 @@ const ReadingPage = () => {
                 isHoverSpeechEnabled={isHoverSpeechEnabled}
                 visualFlags={visualFlags}
                 wordIntervention={wordIntervention}
-                activeTooltip={activeTooltip}
                 onWordHoverStart={handleHoverSpeechStart}
                 onWordHoverEnd={handleHoverSpeechEnd}
                 onStoryPointerMove={handleReadingPointerMove}
                 onStoryPointerLeave={handleStoryPointerLeave}
-                onTooltipRendered={handleTooltipRendered}
               />
 
               <ReadingScorePanel avatarUrl={avatarUrl} score={score} />

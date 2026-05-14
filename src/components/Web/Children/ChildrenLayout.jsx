@@ -45,9 +45,7 @@ const ChildrenLayout = () => {
   });
   const showStoreSidebar = isStoreRoute;
   const [balance, setBalance] = useState(0);
-  const [childId, setChildId] = useState(
-    () => localStorage.getItem("childId") || "",
-  );
+  const [childId, setChildId] = useState("");
 
   useEffect(() => {
     // Đồng bộ childId từ profile (profile trả field id)
@@ -56,24 +54,48 @@ const ChildrenLayout = () => {
       try {
         const payload = await AuthAPI.getProfileAPI();
         const root = payload?.data ?? payload?.user ?? payload ?? {};
-        const id = String(root?.id || "").trim();
-        if (cancelled || !id) return;
+        const id = String(
+          root?.id ||
+            root?._id ||
+            root?.user_id ||
+            root?.childId ||
+            root?.child_id ||
+            root?.child?.id ||
+            "",
+        ).trim();
+        if (cancelled) return;
+        if (!id) {
+          setChildId("");
+          localStorage.removeItem("childId");
+          return;
+        }
         setChildId(id);
         localStorage.setItem("childId", id);
       } catch {
-        // ignore
+        if (!cancelled) {
+          setChildId("");
+          localStorage.removeItem("childId");
+        }
       }
     };
-    if (!childId) run();
+    run();
     return () => {
       cancelled = true;
     };
-  }, [childId]);
+  }, []);
   useEffect(() => {
     if (!childId) return;
-    ChildrenAPI.getBalance(childId).then((data) => {
-      setBalance(data.data.balance);
-    });
+    let cancelled = false;
+    ChildrenAPI.getBalance(childId)
+      .then((data) => {
+        if (!cancelled) setBalance(data?.data?.balance ?? data?.balance ?? 0);
+      })
+      .catch(() => {
+        if (!cancelled) setBalance(0);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [childId]);
   const validateOldPassword = (raw) => {
     const v = String(raw ?? "");
@@ -119,6 +141,7 @@ const ChildrenLayout = () => {
       localStorage.getItem("accessToken");
 
     if (!storedToken) {
+      localStorage.removeItem("childId");
       navigate("/login", { replace: true });
       return;
     }
@@ -163,6 +186,7 @@ const ChildrenLayout = () => {
         localStorage.removeItem("trackingToken");
         localStorage.removeItem("ws_token");
         localStorage.removeItem("wsToken");
+        localStorage.removeItem("childId");
         navigate("/login", { replace: true });
         return;
       }
@@ -206,6 +230,7 @@ const ChildrenLayout = () => {
           localStorage.removeItem("trackingToken");
           localStorage.removeItem("ws_token");
           localStorage.removeItem("wsToken");
+          localStorage.removeItem("childId");
           navigate("/login", { replace: true });
         });
     }
@@ -347,6 +372,7 @@ const ChildrenLayout = () => {
     localStorage.removeItem("trackingToken");
     localStorage.removeItem("ws_token");
     localStorage.removeItem("wsToken");
+    localStorage.removeItem("childId");
 
     navigate("/login", { replace: true });
   };
@@ -797,6 +823,7 @@ const ChildrenLayout = () => {
                 resetSideStory: () => setSideStory(defaultSideStory),
                 balance,
                 setBalance,
+                childId,
               }}
             />
           </section>

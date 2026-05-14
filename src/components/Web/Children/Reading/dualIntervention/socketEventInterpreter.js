@@ -193,6 +193,13 @@ export const interpretTrackingSocketEvent = ({ message, currentWordIndex }) => {
         adaptationType: toStringSafe(payload?.type).toUpperCase() || null,
         confidence: payload?.confidence,
         params: payload?.params || {},
+        regressionType: payload?.regressionType || payload?.regression_type || payload?.params?.regressionType,
+        regressionFocusRadius:
+          payload?.regressionFocusRadius ||
+          payload?.focusRadius ||
+          payload?.focus_radius ||
+          payload?.params?.regressionFocusRadius ||
+          payload?.params?.focusRadius,
         wordIndex: resolveWordIndexFromPayload(payload, currentWordIndex),
       },
     };

@@ -176,9 +176,12 @@ export const createTrackingPoint = ({ x, y, timestamp = Date.now(), wordIndex })
   };
 };
 
-export const createSessionEndEvent = () => ({
+export const createSessionEndEvent = (metadata = {}) => ({
   event: "session:end",
-  data: { timestamp: Date.now() },
+  data: {
+    ...(metadata && typeof metadata === "object" ? metadata : {}),
+    timestamp: Date.now(),
+  },
 });
 
 export const createTooltipShownEvent = ({ tooltip, cognitiveState }) => ({

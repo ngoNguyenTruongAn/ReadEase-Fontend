@@ -9,6 +9,7 @@ const TINTS = ["mint", "lavender", "peach", "coral", "sky"];
 const StorePage = () => {
   const outletContext = useOutletContext();
   const activeFilter = outletContext?.storeFilter ?? "all";
+  const contextChildId = String(outletContext?.childId ?? "").trim();
   // Dùng balance + setBalance từ ChildrenLayout để header tự cập nhật
   const balance = outletContext?.balance ?? null;
   const parentSetBalance = outletContext?.setBalance;
@@ -20,9 +21,7 @@ const StorePage = () => {
   const [redeemingId, setRedeemingId] = useState("");
   const [toast, setToast] = useState({ msg: "", type: "success" });
   const [confirmReward, setConfirmReward] = useState(null);
-  const [childId, setChildId] = useState(
-    () => localStorage.getItem("childId") || "",
-  );
+  const [childId, setChildId] = useState("");
 
   const loadRewards = async (signal) => {
     setLoading(true);
@@ -52,7 +51,12 @@ const StorePage = () => {
 
   // Lấy childId từ profile nếu chưa có
   useEffect(() => {
-    if (childId) return;
+    if (contextChildId) {
+      setChildId(contextChildId);
+      localStorage.setItem("childId", contextChildId);
+      return undefined;
+    }
+
     let mounted = true;
     const run = async () => {
       try {
@@ -60,23 +64,33 @@ const StorePage = () => {
         const root = payload?.data ?? payload?.user ?? payload ?? {};
         const picked =
           root?.id ||
+          root?._id ||
+          root?.user_id ||
           root?.childId ||
           root?.child_id ||
           root?.child?.id ||
           "";
         const normalized = String(picked || "").trim();
-        if (!mounted || !normalized) return;
+        if (!mounted) return;
+        if (!normalized) {
+          setChildId("");
+          localStorage.removeItem("childId");
+          return;
+        }
         setChildId(normalized);
         localStorage.setItem("childId", normalized);
       } catch {
-        // ignore
+        if (mounted) {
+          setChildId("");
+          localStorage.removeItem("childId");
+        }
       }
     };
     run();
     return () => {
       mounted = false;
     };
-  }, [childId]);
+  }, [contextChildId]);
 
   // Balance đã được ChildrenLayout fetch sẵn qua outlet context
   // Không cần fetch lại ở đây

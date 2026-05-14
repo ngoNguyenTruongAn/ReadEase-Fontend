@@ -38,6 +38,7 @@ const clearAuth = () => {
   localStorage.removeItem("trackingToken");
   localStorage.removeItem("ws_token");
   localStorage.removeItem("wsToken");
+  localStorage.removeItem("childId");
 };
 
 instance.interceptors.request.use((config) => {

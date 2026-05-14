@@ -84,30 +84,6 @@ const renderWordPiece = ({ token, useBionic }) => {
   );
 };
 
-const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
-
-const buildCursorTooltipStyle = ({ tooltip }) => {
-  if (!tooltip?.visible) return null;
-  if (tooltip.anchorType !== "cursor") return null;
-
-  if (!Number.isFinite(tooltip.cursorX) || !Number.isFinite(tooltip.cursorY)) {
-    return {
-      left: "50%",
-      top: "12px",
-      transform: "translate(-50%, 0)",
-    };
-  }
-
-  const viewportMaxX = typeof window !== "undefined" ? Math.max(window.innerWidth - 16, 16) : 2048;
-  const viewportMaxY = typeof window !== "undefined" ? Math.max(window.innerHeight - 12, 12) : 2048;
-
-  return {
-    left: `${clamp(tooltip.cursorX, 16, viewportMaxX)}px`,
-    top: `${clamp(tooltip.cursorY - 18, 12, viewportMaxY)}px`,
-    transform: "translate(-50%, -100%)",
-  };
-};
-
 const ReadingBookView = ({
   pageText,
   pageSegmentedText,
@@ -115,15 +91,12 @@ const ReadingBookView = ({
   isHoverSpeechEnabled,
   visualFlags,
   wordIntervention,
-  activeTooltip,
   onWordHoverStart,
   onWordHoverEnd,
   onStoryPointerMove,
   onStoryPointerLeave,
-  onTooltipRendered,
 }) => {
   const wordElementRef = useRef(new Map());
-  const renderedTooltipIdRef = useRef("");
   const lastHoveredWordIndexRef = useRef(null);
   const [lineIndexByWord, setLineIndexByWord] = useState({});
 
@@ -205,7 +178,10 @@ const ReadingBookView = ({
   const hasInterventionTargets = interventionWordIndexes.length > 0;
   const isInterventionActive =
     Boolean(visualFlags?.isVisualActive) && hasInterventionTargets;
-  const isColorBandingActive = hasInterventionTargets;
+  const isColorBandingActive =
+    Boolean(visualFlags?.isVisualActive) &&
+    Boolean(visualFlags?.isColorBandingEnabled) &&
+    hasInterventionTargets;
 
   const recalculateLineIndexByWord = useCallback(() => {
     if (!isColorBandingActive) {
@@ -361,27 +337,6 @@ const ReadingBookView = ({
     triggerHoverSpeechFromWordNode(hoveredWordNode);
   };
 
-  useEffect(() => {
-    if (!activeTooltip?.visible) {
-      return;
-    }
-
-    const hasWordAnchor =
-      Number.isInteger(activeTooltip.wordIndex) &&
-      wordElementRef.current.has(activeTooltip.wordIndex);
-    const hasCursorAnchor = activeTooltip.anchorType === "cursor";
-    const hasViewportAnchor = activeTooltip.anchorType === "viewport";
-
-    if (!hasWordAnchor && !hasCursorAnchor && !hasViewportAnchor) {
-      return;
-    }
-
-    if (renderedTooltipIdRef.current !== activeTooltip.id) {
-      renderedTooltipIdRef.current = activeTooltip.id;
-      onTooltipRendered?.(activeTooltip);
-    }
-  }, [activeTooltip, onTooltipRendered]);
-
   const lineIndexByTokenId = useMemo(() => {
     const tokenLineMap = {};
     let lastResolvedLineIndex = null;
@@ -529,7 +484,7 @@ const ReadingBookView = ({
     const isRegressionLoopFocus =
       regressionType === "LOOP" && wordIndex === regressionWordIndex;
 
-    // STRONG/STALL range words reuse intervention-target-word (bold + letter-spacing)
+    // STRONG/STALL range words reuse the same paint-only target band.
     // exactly like a single-word intervention — no new CSS needed.
     const isRegressionInterventionWord = isRegressionStrongRange || isRegressionLoopFocus;
 
@@ -574,27 +529,11 @@ const ReadingBookView = ({
           token: token.displayText || token.value,
           useBionic,
         })}
-
-        {activeTooltip?.visible &&
-          activeTooltip?.anchorType !== "cursor" &&
-          activeTooltip?.wordIndex === wordIndex && (
-            <span className="reading-inline-tooltip-anchor">
-              <span className="reading-intervention-tooltip" role="status" aria-live="polite">
-                {activeTooltip?.original && (
-                  <span className="reading-tooltip-original">{activeTooltip.original}</span>
-                )}
-                {activeTooltip?.simplified && (
-                  <span className="reading-tooltip-simplified">{activeTooltip.simplified}</span>
-                )}
-              </span>
-            </span>
-          )}
       </span>
     );
   });
 
   const articleStyle = createVisualStyleVars(visualFlags);
-  const cursorTooltipStyle = buildCursorTooltipStyle({ tooltip: activeTooltip });
 
   const articleClassName = [
     "reading-book-view",
@@ -623,33 +562,6 @@ const ReadingBookView = ({
       }}
     >
       <p className={textClassName}>{content}</p>
-
-      {activeTooltip?.visible && activeTooltip?.anchorType === "cursor" && (
-        <div
-          className="reading-intervention-tooltip reading-floating-tooltip"
-          role="status"
-          aria-live="polite"
-          style={cursorTooltipStyle || undefined}
-        >
-          {activeTooltip?.original && (
-            <span className="reading-tooltip-original">{activeTooltip.original}</span>
-          )}
-          {activeTooltip?.simplified && (
-            <span className="reading-tooltip-simplified">{activeTooltip.simplified}</span>
-          )}
-        </div>
-      )}
-
-      {activeTooltip?.visible && activeTooltip?.anchorType === "viewport" && (
-        <div className="reading-intervention-tooltip reading-floating-tooltip reading-floating-tooltip--viewport">
-          {activeTooltip?.original && (
-            <span className="reading-tooltip-original">{activeTooltip.original}</span>
-          )}
-          {activeTooltip?.simplified && (
-            <span className="reading-tooltip-simplified">{activeTooltip.simplified}</span>
-          )}
-        </div>
-      )}
     </article>
   );
 };

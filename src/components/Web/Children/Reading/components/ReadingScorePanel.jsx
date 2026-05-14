@@ -8,6 +8,10 @@ const ReadingScorePanel = ({ avatarUrl, score = 0 }) => {
         src={avatarUrl || defaultAvatar}
         alt="Avatar"
         className="reading-score-avatar"
+        onError={(event) => {
+          event.currentTarget.onerror = null;
+          event.currentTarget.src = defaultAvatar;
+        }}
       />
 
       <div className="reading-score-stars" aria-label="Điểm sao">

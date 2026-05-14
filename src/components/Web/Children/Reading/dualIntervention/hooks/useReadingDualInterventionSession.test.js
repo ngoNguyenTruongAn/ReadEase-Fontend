@@ -49,7 +49,7 @@ class MockWebSocket {
   }
 }
 
-const createPointerMoveEvent = ({ wordIndex, x, y }) => ({
+const createPointerMoveEvent = ({ wordIndex, x, y, top, left, width = 40, height = 20 }) => ({
   pointerType: "mouse",
   clientX: x,
   clientY: y,
@@ -58,6 +58,14 @@ const createPointerMoveEvent = ({ wordIndex, x, y }) => ({
       if (selector !== "[data-word-index]") return null;
       return {
         getAttribute: () => String(wordIndex),
+        getBoundingClientRect: () => ({
+          top,
+          left,
+          right: Number.isFinite(left) ? left + width : undefined,
+          bottom: Number.isFinite(top) ? top + height : undefined,
+          width,
+          height,
+        }),
       };
     },
   },
@@ -242,24 +250,90 @@ describe("useReadingDualInterventionSession scenarios", () => {
     });
 
     expect(result.current.trackingDebug.inbound.tooltip).toBe(1);
-    expect(result.current.activeTooltip?.visible).toBe(true);
+    expect(result.current.trackingDebug.lastInboundEvent).toBe("adaptation:trigger");
+    expect(result.current.activeTooltip).toBeNull();
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(4);
 
     act(() => {
-      result.current.handleTooltipRendered(result.current.activeTooltip);
+      result.current.handleTooltipRendered({
+        id: "tip-1",
+        visible: true,
+        wordIndex: 3,
+      });
     });
 
     await act(async () => {
       await flushMicrotasks();
     });
 
-    expect(result.current.trackingDebug.outbound.tooltipShow).toBe(1);
+    expect(result.current.trackingDebug.outbound.tooltipShow).toBe(0);
 
     const tooltipAckFrameRaw = ws.sentFrames.find((frame) => {
       const parsed = JSON.parse(frame);
       return parsed.event === "tooltip:show" && parsed.data.source === "frontend";
     });
-    const tooltipAckFrame = JSON.parse(tooltipAckFrameRaw);
-    expect(tooltipAckFrame.data.wordIndex).toBe(3);
+    expect(tooltipAckFrameRaw).toBeUndefined();
+  });
+
+  it("streams synthetic mouse samples while cursor is stationary on a word", async () => {
+    localStorage.setItem(
+      "tracking_token",
+      createJwt({
+        user_id: "user-stationary",
+        session_id: "session-stationary",
+      }),
+    );
+
+    const { result } = renderHook(() =>
+      useReadingDualInterventionSession({
+        enabled: true,
+        contentId: "story-stationary",
+        apiBaseUrl: "http://localhost:3000/api/v1/",
+      }),
+    );
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    const ws = MockWebSocket.instances[0];
+
+    act(() => {
+      ws.emitOpen();
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    act(() => {
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({ wordIndex: 9, x: 210, y: 144 }),
+      );
+      vi.advanceTimersByTime(560);
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    const mouseBatchFrames = ws.sentFrames
+      .map((frame) => JSON.parse(frame))
+      .filter((frame) => frame.event === "mouse:batch");
+
+    expect(mouseBatchFrames.length).toBeGreaterThan(0);
+    expect(result.current.trackingDebug.outbound.mouseBatch).toBeGreaterThan(0);
+
+    const stationaryPoints = mouseBatchFrames.flatMap((frame) =>
+      frame.data.points.filter((point) => point.wordIndex === 9 && point.x === 210 && point.y === 144),
+    );
+
+    expect(stationaryPoints.length).toBeGreaterThanOrEqual(4);
+    expect(
+      stationaryPoints.every(
+        (point) => point.wordIndex === 9 && point.word_index === 9,
+      ),
+    ).toBe(true);
   });
 
   it("reconnects after abnormal close and resumes mouse batching", async () => {
@@ -361,7 +435,7 @@ describe("useReadingDualInterventionSession scenarios", () => {
     expect(MockWebSocket.instances).toHaveLength(0);
   });
 
-  it("holds socket regression adaptation until cursor backtracks for more than 3 seconds", async () => {
+  it("applies backend regression adaptation immediately", async () => {
     localStorage.setItem(
       "tracking_token",
       createJwt({
@@ -403,7 +477,7 @@ describe("useReadingDualInterventionSession scenarios", () => {
     });
 
     expect(result.current.trackingDebug.inbound.adaptation).toBe(1);
-    expect(result.current.visualFlags.isVisualActive).toBe(false);
+    expect(result.current.visualFlags.isVisualActive).toBe(true);
 
     act(() => {
       result.current.handleStoryPointerMove(createPointerMoveEvent({ wordIndex: 12, x: 314, y: 152 }));
@@ -479,7 +553,272 @@ describe("useReadingDualInterventionSession scenarios", () => {
     expect(result.current.trackingDebug.localFallbackActive).toBe(true);
   });
 
-  it("waits around 3.5 seconds of stationary cursor before local dwell fallback", async () => {
+  it("ignores line-wrap overshoot settling before applying local regression", async () => {
+    localStorage.setItem(
+      "access_token",
+      createJwt({
+        sub: "user-line-wrap",
+        role: "ROLE_CHILD",
+      }),
+    );
+
+    const { result } = renderHook(() =>
+      useReadingDualInterventionSession({
+        enabled: true,
+        contentId: "story-line-wrap",
+        apiBaseUrl: "http://localhost:3000/api/v1/",
+        resolveTooltipByWordIndex: () => null,
+      }),
+    );
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    act(() => {
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({ wordIndex: 21, x: 500, y: 100, top: 100, left: 500 }),
+      );
+      vi.advanceTimersByTime(300);
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({ wordIndex: 25, x: 160, y: 132, top: 132, left: 160 }),
+      );
+      vi.advanceTimersByTime(800);
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({ wordIndex: 24, x: 130, y: 132, top: 132, left: 130 }),
+      );
+      vi.advanceTimersByTime(800);
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({ wordIndex: 23, x: 100, y: 132, top: 132, left: 100 }),
+      );
+      vi.advanceTimersByTime(800);
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({ wordIndex: 22, x: 70, y: 132, top: 132, left: 70 }),
+      );
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.visualFlags.isVisualActive).toBe(false);
+    expect(result.current.trackingDebug.localFallbackInterventions).toBe(0);
+  });
+
+  it("retargets backend interventions to a new word without waiting for the old style timeout", async () => {
+    localStorage.setItem(
+      "tracking_token",
+      createJwt({
+        user_id: "user-retarget",
+        session_id: "session-retarget",
+      }),
+    );
+
+    const { result } = renderHook(() =>
+      useReadingDualInterventionSession({
+        enabled: true,
+        contentId: "story-retarget",
+        apiBaseUrl: "http://localhost:3000/api/v1/",
+      }),
+    );
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    const ws = MockWebSocket.instances[0];
+
+    act(() => {
+      ws.emitOpen();
+      ws.emitMessage({
+        event: "adaptation:trigger",
+        data: {
+          state: "REGRESSION",
+          mode: "DUAL_INTERVENTION",
+          confidence: 0.9,
+          wordIndex: 5,
+        },
+      });
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(5);
+
+    act(() => {
+      vi.advanceTimersByTime(300);
+      ws.emitMessage({
+        event: "adaptation:trigger",
+        data: {
+          state: "REGRESSION",
+          mode: "DUAL_INTERVENTION",
+          confidence: 0.92,
+          wordIndex: 8,
+        },
+      });
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(8);
+    expect(result.current.visualFlags.isVisualActive).toBe(true);
+  });
+
+  it("holds backend regression retarget only while cursor is settling across a line wrap", async () => {
+    localStorage.setItem(
+      "tracking_token",
+      createJwt({
+        user_id: "user-line-wrap-backend",
+        session_id: "session-line-wrap-backend",
+      }),
+    );
+
+    const { result } = renderHook(() =>
+      useReadingDualInterventionSession({
+        enabled: true,
+        contentId: "story-line-wrap-backend",
+        apiBaseUrl: "http://localhost:3000/api/v1/",
+      }),
+    );
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    const ws = MockWebSocket.instances[0];
+
+    act(() => {
+      ws.emitOpen();
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({ wordIndex: 10, x: 500, y: 100, top: 100, left: 500 }),
+      );
+      ws.emitMessage({
+        event: "adaptation:trigger",
+        data: {
+          state: "REGRESSION",
+          mode: "DUAL_INTERVENTION",
+          confidence: 0.9,
+          wordIndex: 10,
+        },
+      });
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(10);
+
+    act(() => {
+      vi.advanceTimersByTime(300);
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({ wordIndex: 13, x: 180, y: 134, top: 134, left: 180 }),
+      );
+      ws.emitMessage({
+        event: "adaptation:trigger",
+        data: {
+          state: "REGRESSION",
+          mode: "DUAL_INTERVENTION",
+          confidence: 0.9,
+          wordIndex: 13,
+        },
+      });
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(10);
+
+    act(() => {
+      vi.advanceTimersByTime(2300);
+      ws.emitMessage({
+        event: "adaptation:trigger",
+        data: {
+          state: "REGRESSION",
+          mode: "DUAL_INTERVENTION",
+          confidence: 0.9,
+          wordIndex: 13,
+        },
+      });
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(13);
+
+    act(() => {
+      vi.advanceTimersByTime(4000);
+      ws.emitMessage({
+        event: "adaptation:trigger",
+        data: {
+          state: "REGRESSION",
+          mode: "DUAL_INTERVENTION",
+          confidence: 0.9,
+          wordIndex: 13,
+        },
+      });
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(13);
+  });
+
+  it("classifies local oscillation fallback as LOOP", async () => {
+    localStorage.setItem(
+      "access_token",
+      createJwt({
+        sub: "user-loop",
+        role: "ROLE_CHILD",
+      }),
+    );
+
+    const { result } = renderHook(() =>
+      useReadingDualInterventionSession({
+        enabled: true,
+        contentId: "story-loop",
+        apiBaseUrl: "http://localhost:3000/api/v1/",
+        resolveTooltipByWordIndex: () => null,
+      }),
+    );
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    act(() => {
+      result.current.handleStoryPointerMove(createPointerMoveEvent({ wordIndex: 10, x: 200, y: 120 }));
+      vi.advanceTimersByTime(700);
+      result.current.handleStoryPointerMove(createPointerMoveEvent({ wordIndex: 11, x: 230, y: 120 }));
+      vi.advanceTimersByTime(700);
+      result.current.handleStoryPointerMove(createPointerMoveEvent({ wordIndex: 10, x: 200, y: 120 }));
+      vi.advanceTimersByTime(700);
+      result.current.handleStoryPointerMove(createPointerMoveEvent({ wordIndex: 11, x: 230, y: 120 }));
+      vi.advanceTimersByTime(700);
+      result.current.handleStoryPointerMove(createPointerMoveEvent({ wordIndex: 10, x: 200, y: 120 }));
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.visualFlags.isVisualActive).toBe(true);
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(10);
+    expect(result.current.wordIntervention.regressionType).toBe("LOOP");
+    expect(result.current.wordIntervention.regressionFocusRadius).toBe(3);
+  });
+
+  it("waits around 4.2 seconds of stationary cursor before local dwell fallback", async () => {
     localStorage.setItem(
       "access_token",
       createJwt({
@@ -503,7 +842,7 @@ describe("useReadingDualInterventionSession scenarios", () => {
 
     act(() => {
       result.current.handleStoryPointerMove(createPointerMoveEvent({ wordIndex: 7, x: 200, y: 120 }));
-      vi.advanceTimersByTime(3300);
+      vi.advanceTimersByTime(4000);
     });
 
     await act(async () => {
@@ -514,7 +853,7 @@ describe("useReadingDualInterventionSession scenarios", () => {
     expect(result.current.trackingDebug.localFallbackInterventions).toBe(0);
 
     act(() => {
-      vi.advanceTimersByTime(300);
+      vi.advanceTimersByTime(400);
     });
 
     await act(async () => {
@@ -522,7 +861,8 @@ describe("useReadingDualInterventionSession scenarios", () => {
     });
 
     expect(result.current.visualFlags.isVisualActive).toBe(true);
-    expect(result.current.wordIntervention.regressionWordIndex).toBe(7);
+    expect(result.current.wordIntervention.distractionWordIndex).toBe(7);
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(null);
     expect(result.current.trackingDebug.localFallbackReason).toBe("local-dwell-stall");
   });
 });

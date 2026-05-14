@@ -8,15 +8,11 @@ import {
   createMouseBatchEvent,
   createSessionEndEvent,
   createSessionStartEvent,
-  createTooltipShownEvent,
   getTrackingAuthTokenContext,
   parseTrackingSocketMessage,
   resolveTrackingSocketUrl,
 } from "../trackingProtocol";
-import {
-  createTooltipFromSocketPayload,
-  interpretTrackingSocketEvent,
-} from "../socketEventInterpreter";
+import { interpretTrackingSocketEvent } from "../socketEventInterpreter";
 import {
   ADAPTATION_STATES,
   INITIAL_VISUAL_FLAGS,
@@ -93,8 +89,10 @@ const QUICK_CLOSE_THRESHOLD_MS = 180;
 // DEV cooldown khớp với fluentTimeoutMs (6000ms) để đảm bảo intervention cũ
 // tắt xong trước khi cho phép fire tiếp — tránh style nhảy liên tục khi test.
 const LOCAL_FALLBACK_COOLDOWN_MS = import.meta.env.DEV ? 6000 : 3600;
+// The long cooldown is for same-word repeats; different words retarget with this shorter gap.
+const LOCAL_FALLBACK_INTERRUPT_GAP_MS = 800;
 const LOCAL_FALLBACK_SIGNAL_RESET_MS = 5000;
-const LOCAL_FALLBACK_DWELL_MIN_MS = 3500;
+const LOCAL_FALLBACK_DWELL_MIN_MS = 4200;
 const LOCAL_FALLBACK_DWELL_POINTER_TOLERANCE_PX = 6;
 // DEV_TEST_MODE: hạ threshold để dễ trigger REGRESSION khi test thủ công,
 // nhưng vẫn đủ cao để không bắt zigzag tự nhiên khi di chuột đọc bình thường.
@@ -106,6 +104,11 @@ const LOCAL_FALLBACK_REGRESSION_MIN_EVENTS      = DEV_TEST_REGRESSION ? 3 : 2;
 const LOCAL_FALLBACK_REGRESSION_MIN_DURATION_MS = DEV_TEST_REGRESSION ? 1500 : 3000;
 const LOCAL_FALLBACK_REGRESSION_MAX_GAP_MS      = DEV_TEST_REGRESSION ? 3000 : 1800;
 const LOCAL_FALLBACK_BEHAVIOR_READY_TTL_MS = 4000;
+const LINE_WRAP_VERTICAL_THRESHOLD_PX = 14;
+const LINE_WRAP_LEFTWARD_THRESHOLD_PX = 12;
+const LINE_WRAP_SETTLE_TTL_MS = 2200;
+const LINE_WRAP_SETTLE_MAX_BACKTRACK_WORDS = 6;
+const LINE_WRAP_SETTLE_MAX_FORWARD_WORDS = 4;
 
 const HANDSHAKE_VARIANTS = [
   "tracking:token-only",
@@ -138,6 +141,12 @@ const createInitialLocalFallbackSignal = (lastTriggeredAt = 0) => ({
   loopDirectionChanges: 0,
   loopLastDirection: null,
   loopStartedAt: null,
+  lastWordLayoutTop: null,
+  lastWordLayoutLeft: null,
+  lineWrapSettleStartedAt: null,
+  lineWrapSettleLandingWordIndex: null,
+  lineWrapSettleLineTop: null,
+  lineWrapSettleLowestWordIndex: null,
 });
 
 const resetRegressionSignal = (signal, { clearReadiness = true } = {}) => {
@@ -160,6 +169,13 @@ const resetLoopSignal = (signal) => {
   signal.loopStartedAt = null;
 };
 
+const resetLineWrapSettleSignal = (signal) => {
+  signal.lineWrapSettleStartedAt = null;
+  signal.lineWrapSettleLandingWordIndex = null;
+  signal.lineWrapSettleLineTop = null;
+  signal.lineWrapSettleLowestWordIndex = null;
+};
+
 // Vùng hẹp tối đa để tính là LOOP (số từ)
 const LOOP_ZONE_WIDTH = 4;
 // Số lần đổi chiều tối thiểu để fire LOOP
@@ -180,6 +196,91 @@ const resolveSessionStartStrategyLabel = (strategy) => {
 const resolveHandshakeVariantLabel = (variantIndex) =>
   HANDSHAKE_VARIANTS[Math.max(0, Math.min(variantIndex, HANDSHAKE_VARIANTS.length - 1))];
 
+const REGRESSION_TYPES = new Set(["MILD", "STRONG", "LOOP", "STALL"]);
+
+const normalizeRegressionTypeValue = (value) => {
+  const normalized = String(value ?? "").trim().toUpperCase();
+  return REGRESSION_TYPES.has(normalized) ? normalized : null;
+};
+
+const normalizeRegressionType = (payload) => {
+  const raw =
+    payload?.regressionType ||
+    payload?.regression_type ||
+    payload?.params?.regressionType ||
+    payload?.params?.regression_type ||
+    "";
+  return normalizeRegressionTypeValue(raw) || "MILD";
+};
+
+const resolveFocusRadius = (payload, fallback = 0) => {
+  const raw =
+    payload?.regressionFocusRadius ??
+    payload?.focusRadius ??
+    payload?.focus_radius ??
+    payload?.params?.regressionFocusRadius ??
+    payload?.params?.focusRadius ??
+    payload?.params?.focus_radius;
+  const parsed = toIntegerOrNull(raw);
+  return parsed !== null && parsed >= 0 ? parsed : fallback;
+};
+
+const getWordLayoutSnapshot = (wordElement) => {
+  const rect = wordElement?.getBoundingClientRect?.();
+  if (!rect) return null;
+
+  const top = Number(rect.top);
+  const left = Number(rect.left);
+  if (!Number.isFinite(top) || !Number.isFinite(left)) return null;
+
+  return { top, left };
+};
+
+const isSameVisualLine = (leftTop, rightTop) =>
+  Number.isFinite(leftTop) &&
+  Number.isFinite(rightTop) &&
+  Math.abs(leftTop - rightTop) <= LINE_WRAP_VERTICAL_THRESHOLD_PX;
+
+const isLowerVisualLine = (previousTop, nextTop) =>
+  Number.isFinite(previousTop) &&
+  Number.isFinite(nextTop) &&
+  nextTop - previousTop > LINE_WRAP_VERTICAL_THRESHOLD_PX;
+
+const isLikelyLineWrapForward = ({ previousTop, nextTop, previousLeft, nextLeft }) =>
+  isLowerVisualLine(previousTop, nextTop) &&
+  Number.isFinite(previousLeft) &&
+  Number.isFinite(nextLeft) &&
+  previousLeft - nextLeft > LINE_WRAP_LEFTWARD_THRESHOLD_PX;
+
+const isWordInsideLineWrapSettleZone = ({ signal, wordIndex, timestamp }) => {
+  if (!Number.isInteger(wordIndex) || wordIndex < 0) return false;
+  if (!Number.isFinite(signal.lineWrapSettleStartedAt)) return false;
+  if (!Number.isInteger(signal.lineWrapSettleLandingWordIndex)) return false;
+  if (timestamp - signal.lineWrapSettleStartedAt > LINE_WRAP_SETTLE_TTL_MS) return false;
+
+  const landingWordIndex = signal.lineWrapSettleLandingWordIndex;
+  return (
+    wordIndex >= landingWordIndex - LINE_WRAP_SETTLE_MAX_BACKTRACK_WORDS &&
+    wordIndex <= landingWordIndex + LINE_WRAP_SETTLE_MAX_FORWARD_WORDS
+  );
+};
+
+const resolveLocalRegressionType = ({ signal, requestedType, backtrackDelta }) => {
+  const explicitType = normalizeRegressionTypeValue(requestedType);
+  if (explicitType) return explicitType;
+  if (signal.loopDirectionChanges >= LOOP_MIN_DIRECTION_CHANGES) return "LOOP";
+  if (backtrackDelta >= 4) return "STRONG";
+  return "MILD";
+};
+
+const resolveLocalFocusRadius = ({ regressionType, requestedFocusRadius, backtrackDelta }) => {
+  const parsedFocusRadius = toIntegerOrNull(requestedFocusRadius);
+  if (parsedFocusRadius !== null && parsedFocusRadius >= 0) return parsedFocusRadius;
+  if (regressionType === "LOOP") return 3;
+  if (regressionType === "STRONG") return Math.max(1, backtrackDelta - 1);
+  return 0;
+};
+
 const useReadingDualInterventionSession = ({
   enabled,
   contentId,
@@ -187,7 +288,6 @@ const useReadingDualInterventionSession = ({
   trackingBaseUrl,
   flushIntervalMs = DEFAULT_FLUSH_INTERVAL_MS,
   fluentTimeoutMs = DEFAULT_FLUENT_TIMEOUT_MS,
-  resolveTooltipByWordIndex,
   onAdaptationState,
 }) => {
   const socketRef = useRef(null);
@@ -216,18 +316,15 @@ const useReadingDualInterventionSession = ({
   });
   const fluentTimerRef = useRef(null);
   const distractionTimerRef = useRef(null);
-  const lastAckedTooltipIdRef = useRef("");
   const currentWordIndexRef = useRef(null);
   // Track từ đang được can thiệp hiện tại — dùng để cho phép interrupt cooldown
   // khi signal mới nhắm vào một từ khác hẳn từ đang active.
   const activeInterventionWordIndexRef = useRef(null);
-  const resolveTooltipByWordIndexRef = useRef(resolveTooltipByWordIndex);
   const onAdaptationStateRef = useRef(onAdaptationState);
   const sessionIdRef = useRef("");
 
   const [visualFlags, setVisualFlags] = useState(INITIAL_VISUAL_FLAGS);
   const [wordIntervention, setWordIntervention] = useState(INITIAL_WORD_INTERVENTION);
-  const [activeTooltip, setActiveTooltip] = useState(null);
   const [trackingDebug, setTrackingDebug] = useState(INITIAL_TRACKING_DEBUG);
 
   useEffect(() => {
@@ -308,9 +405,16 @@ const useReadingDualInterventionSession = ({
     });
   }, []);
 
-  useEffect(() => {
-    resolveTooltipByWordIndexRef.current = resolveTooltipByWordIndex;
-  }, [resolveTooltipByWordIndex]);
+  const countDisabledTooltipInbound = useCallback(() => {
+    setTrackingDebug((previous) => ({
+      ...previous,
+      inbound: {
+        ...previous.inbound,
+        tooltip: previous.inbound.tooltip + 1,
+      },
+      lastUpdateAt: Date.now(),
+    }));
+  }, []);
 
   const clearFlushTimer = useCallback(() => {
     if (!flushTimerRef.current) return;
@@ -372,7 +476,6 @@ const useReadingDualInterventionSession = ({
     activeInterventionWordIndexRef.current = null;
     setVisualFlags(INITIAL_VISUAL_FLAGS);
     setWordIntervention(INITIAL_WORD_INTERVENTION);
-    setActiveTooltip(null);
     markDebug({
       localFallbackActive: false,
       localFallbackReason: "",
@@ -468,41 +571,70 @@ const useReadingDualInterventionSession = ({
   const createAuthBootstrapEvents = useCallback(() => [], []);
 
   const triggerLocalFallbackIntervention = useCallback(
-    ({ wordIndex, reason }) => {
+    ({
+      wordIndex,
+      reason,
+      state = ADAPTATION_STATES.REGRESSION,
+      regressionType,
+      regressionFocusRadius,
+    }) => {
       if (!localFallbackAllowedRef.current) return;
 
       const now = Date.now();
-      const timeSinceLast = now - localFallbackSignalRef.current.lastTriggeredAt;
+      const signal = localFallbackSignalRef.current;
+      const resolvedWordIndex = Number.isInteger(wordIndex) && wordIndex >= 0 ? wordIndex : null;
+      const isRegressionState = state === ADAPTATION_STATES.REGRESSION;
+
+      if (
+        isRegressionState &&
+        isWordInsideLineWrapSettleZone({
+          signal,
+          wordIndex: resolvedWordIndex,
+          timestamp: now,
+        })
+      ) {
+        return;
+      }
+
+      const timeSinceLast = now - signal.lastTriggeredAt;
 
       // Cho phép interrupt sớm nếu signal mới nhắm vào từ khác hẳn từ đang active —
       // giữ min 800ms để tránh flicker khi chuột đi qua liên tục.
       // Nếu cùng từ thì vẫn giữ cooldown đầy đủ để tránh re-trigger dư thừa.
-      const resolvedWordIndex = Number.isInteger(wordIndex) && wordIndex >= 0 ? wordIndex : null;
       const isDifferentWord =
         resolvedWordIndex !== null &&
         resolvedWordIndex !== activeInterventionWordIndexRef.current;
-      const MIN_INTERRUPT_GAP_MS = 800;
-
       const cooldownPassed = timeSinceLast >= LOCAL_FALLBACK_COOLDOWN_MS;
-      const allowEarlyInterrupt = isDifferentWord && timeSinceLast >= MIN_INTERRUPT_GAP_MS;
+      const allowEarlyInterrupt =
+        isDifferentWord && timeSinceLast >= LOCAL_FALLBACK_INTERRUPT_GAP_MS;
 
       if (!cooldownPassed && !allowEarlyInterrupt) return;
 
-      localFallbackSignalRef.current.lastTriggeredAt = now;
+      signal.lastTriggeredAt = now;
 
-      const fallbackParams = {
-        letterSpacing: 0.094,
-        transitionMs: 130,
-        colorBandingStrength: 0.24,
-        invertedDeep: true,
-        invertedStrength: 0.9,
-        contrastBoost: 1.22,
-      };
+      const fallbackMode = isRegressionState ? "DUAL_INTERVENTION" : "VISUAL_ONLY";
+      const fallbackParams = isRegressionState
+        ? {
+            letterSpacing: 0.094,
+            transitionMs: 130,
+            colorBandingStrength: 0.24,
+            invertedDeep: true,
+            invertedStrength: 0.9,
+            contrastBoost: 1.22,
+          }
+        : {
+            letterSpacing: 0.058,
+            transitionMs: 160,
+            colorBandingStrength: 0.16,
+            invertedDeep: false,
+            invertedStrength: 0,
+            contrastBoost: 1.08,
+          };
 
       setVisualFlags(
         createVisualFlagsFromAdaptation({
-          state: ADAPTATION_STATES.REGRESSION,
-          mode: "DUAL_INTERVENTION",
+          state,
+          mode: fallbackMode,
           confidence: 0.88,
           params: {
             ...fallbackParams,
@@ -514,24 +646,27 @@ const useReadingDualInterventionSession = ({
 
       // Classify LOOP nếu có đủ direction changes (di qua lại vùng hẹp),
       // còn lại là STRONG/MILD dựa trên backtrackDelta.
-      const signal = localFallbackSignalRef.current;
       const backtrackDelta =
         Number.isInteger(signal.regressionStartWordIndex) &&
           Number.isInteger(signal.regressionLowestWordIndex)
           ? signal.regressionStartWordIndex - signal.regressionLowestWordIndex
           : 0;
 
-      const isLoopByDirectionChange =
-        signal.loopDirectionChanges >= LOOP_MIN_DIRECTION_CHANGES;
-
-      const localRegressionType = isLoopByDirectionChange ? "LOOP" : "STRONG";
-      const localFocusRadius =
-        localRegressionType === "LOOP" ? 3 : Math.max(1, backtrackDelta - 1);
+      const localRegressionType = resolveLocalRegressionType({
+        signal,
+        requestedType: regressionType,
+        backtrackDelta,
+      });
+      const localFocusRadius = resolveLocalFocusRadius({
+        regressionType: localRegressionType,
+        requestedFocusRadius: regressionFocusRadius,
+        backtrackDelta,
+      });
 
       emitAdaptationState(
         {
-          state: ADAPTATION_STATES.REGRESSION,
-          mode: "DUAL_INTERVENTION",
+          state,
+          mode: fallbackMode,
           adaptationType: "LOCAL_FALLBACK",
           confidence: 0.88,
           params: {
@@ -559,11 +694,11 @@ const useReadingDualInterventionSession = ({
       activeInterventionWordIndexRef.current = resolvedWordIndex;
       setWordIntervention((previous) => ({
         ...previous,
-        distractionWordIndex: null,
-        regressionWordIndex: resolvedWordIndex,
-        regressionType: localRegressionType,
-        regressionFocusRadius: localFocusRadius,
-        semanticWordIndex: resolvedWordIndex,
+        distractionWordIndex: state === ADAPTATION_STATES.DISTRACTION ? resolvedWordIndex : null,
+        regressionWordIndex: isRegressionState ? resolvedWordIndex : null,
+        regressionType: isRegressionState ? localRegressionType : null,
+        regressionFocusRadius: isRegressionState ? localFocusRadius : 0,
+        semanticWordIndex: null,
       }));
 
       setTrackingDebug((previous) => ({
@@ -581,7 +716,7 @@ const useReadingDualInterventionSession = ({
   );
 
   const evaluateRegressionFallbackByWordIndex = useCallback(
-    ({ wordIndex, timestamp }) => {
+    ({ wordIndex, timestamp, wordLayout }) => {
       if (!Number.isInteger(wordIndex) || wordIndex < 0) return false;
 
       const signal = localFallbackSignalRef.current;
@@ -592,115 +727,160 @@ const useReadingDualInterventionSession = ({
         timestamp - signal.lastObservedAt > LOCAL_FALLBACK_SIGNAL_RESET_MS
       ) {
         resetRegressionSignal(signal);
+        resetLoopSignal(signal);
+        resetLineWrapSettleSignal(signal);
+      }
+
+      if (
+        Number.isFinite(signal.lineWrapSettleStartedAt) &&
+        timestamp - signal.lineWrapSettleStartedAt > LINE_WRAP_SETTLE_TTL_MS
+      ) {
+        resetLineWrapSettleSignal(signal);
       }
 
       if (Number.isInteger(signal.lastWordIndex)) {
         const wordDelta = wordIndex - signal.lastWordIndex;
+        const didMoveToLowerVisualLine = isLikelyLineWrapForward({
+          previousTop: signal.lastWordLayoutTop,
+          nextTop: wordLayout?.top,
+          previousLeft: signal.lastWordLayoutLeft,
+          nextLeft: wordLayout?.left,
+        });
+        const isLineWrapSettleBacktrack =
+          Number.isFinite(signal.lineWrapSettleStartedAt) &&
+          Number.isInteger(signal.lineWrapSettleLandingWordIndex) &&
+          signal.lineWrapSettleLandingWordIndex > wordIndex &&
+          signal.lineWrapSettleLandingWordIndex - wordIndex <=
+            LINE_WRAP_SETTLE_MAX_BACKTRACK_WORDS &&
+          isSameVisualLine(signal.lineWrapSettleLineTop, wordLayout?.top);
 
         if (wordDelta <= -LOCAL_FALLBACK_REGRESSION_MIN_STEP_DELTA) {
-          // --- LOOP tracking: đổi chiều backward ---
-          if (signal.loopLastDirection === "forward") {
-            // Vừa tiến xong giờ lùi = 1 lần đổi chiều
-            const currentZoneWidth =
-              Number.isInteger(signal.loopZoneMin) && Number.isInteger(signal.loopZoneMax)
-                ? signal.loopZoneMax - signal.loopZoneMin
-                : 0;
-            if (currentZoneWidth <= LOOP_ZONE_WIDTH) {
-              signal.loopDirectionChanges += 1;
-            } else {
-              // Vùng quá rộng — không phải loop, reset
-              resetLoopSignal(signal);
-            }
-          }
-          signal.loopLastDirection = "backward";
-          if (signal.loopStartedAt === null) signal.loopStartedAt = timestamp;
-          signal.loopZoneMin = Number.isInteger(signal.loopZoneMin)
-            ? Math.min(signal.loopZoneMin, wordIndex)
-            : wordIndex;
-          signal.loopZoneMax = Number.isInteger(signal.loopZoneMax)
-            ? Math.max(signal.loopZoneMax, signal.lastWordIndex)
-            : signal.lastWordIndex;
-
-          // --- Regression tracking ---
-          const backwardGapMs = Number.isFinite(signal.regressionLastBackwardAt)
-            ? timestamp - signal.regressionLastBackwardAt
-            : 0;
-          const shouldStartRegressionRun =
-            signal.regressionStartedAt === null ||
-            backwardGapMs > LOCAL_FALLBACK_REGRESSION_MAX_GAP_MS ||
-            !Number.isInteger(signal.regressionStartWordIndex);
-
-          if (shouldStartRegressionRun) {
-            signal.regressionStartedAt = Number.isFinite(signal.lastObservedAt)
-              ? signal.lastObservedAt
-              : timestamp;
-            signal.regressionStartWordIndex = signal.lastWordIndex;
-            signal.regressionLowestWordIndex = wordIndex;
-            signal.regressionStepCount = 1;
-          } else {
-            signal.regressionLowestWordIndex = Math.min(
-              signal.regressionLowestWordIndex,
-              wordIndex,
-            );
-            signal.regressionStepCount += 1;
-          }
-
-          signal.regressionLastBackwardAt = timestamp;
-
-          const regressionDurationMs = timestamp - signal.regressionStartedAt;
-          const totalBacktrackDelta =
-            signal.regressionStartWordIndex - signal.regressionLowestWordIndex;
-
-          // OVERSHOOT GUARD: khi wrap dòng, chuột thường landing overshoot vào word
-          // cao hơn đích (ví dụ 24/25) rồi kéo nhanh về đầu dòng mới (22).
-          // Pattern này xảy ra rất nhanh (< 600ms), ít bước (≤ 2), lùi không nhiều (≤ 4 từ).
-          // Regression thật của trẻ chậm hơn và có nhiều bước lùi hơn.
-          const isLikelyLineWrapOvershoot =
-            regressionDurationMs < 600 &&
-            totalBacktrackDelta <= 4 &&
-            signal.regressionStepCount <= 2;
-
-          if (isLikelyLineWrapOvershoot) {
-            // Reset cả regression lẫn loop để tránh stepCount cộng dồn sai
+          if (isLineWrapSettleBacktrack) {
+            signal.lineWrapSettleLowestWordIndex = Number.isInteger(
+              signal.lineWrapSettleLowestWordIndex,
+            )
+              ? Math.min(signal.lineWrapSettleLowestWordIndex, wordIndex)
+              : wordIndex;
             resetRegressionSignal(signal);
             resetLoopSignal(signal);
-          }
-
-          const hasSustainedRegression =
-            !isLikelyLineWrapOvershoot &&
-            regressionDurationMs > LOCAL_FALLBACK_REGRESSION_MIN_DURATION_MS &&
-            totalBacktrackDelta >= LOCAL_FALLBACK_REGRESSION_MIN_TOTAL_DELTA &&
-            signal.regressionStepCount >= LOCAL_FALLBACK_REGRESSION_MIN_EVENTS;
-
-          // LOOP fire độc lập với hasSustainedRegression —
-          // không cần đủ duration/delta, chỉ cần đủ direction changes.
-          const hasLoopPattern =
-            !isLikelyLineWrapOvershoot &&
-            signal.loopDirectionChanges >= LOOP_MIN_DIRECTION_CHANGES;
-
-          if (hasLoopPattern) {
-            isRegressionReady = true;
-            signal.regressionReadyAt = timestamp;
-            signal.regressionReadyWordIndex = wordIndex;
-            resetRegressionSignal(signal, { clearReadiness: false });
-            resetLoopSignal(signal);
-            if (localFallbackAllowedRef.current) {
-              triggerLocalFallbackIntervention({
-                wordIndex,
-                reason: "local-loop-oscillation",
-              });
+            if (pendingAdaptationRef.current?.payload?.state === ADAPTATION_STATES.REGRESSION) {
+              pendingAdaptationRef.current = null;
             }
-          } else if (hasSustainedRegression) {
-            isRegressionReady = true;
-            signal.regressionReadyAt = timestamp;
-            signal.regressionReadyWordIndex = wordIndex;
-            resetRegressionSignal(signal, { clearReadiness: false });
-            resetLoopSignal(signal);
-            if (localFallbackAllowedRef.current) {
-              triggerLocalFallbackIntervention({
+          } else {
+            // --- LOOP tracking: đổi chiều backward ---
+            if (signal.loopLastDirection === "forward") {
+              // Vừa tiến xong giờ lùi = 1 lần đổi chiều
+              const currentZoneWidth =
+                Number.isInteger(signal.loopZoneMin) && Number.isInteger(signal.loopZoneMax)
+                  ? signal.loopZoneMax - signal.loopZoneMin
+                  : 0;
+              if (currentZoneWidth <= LOOP_ZONE_WIDTH) {
+                signal.loopDirectionChanges += 1;
+              } else {
+                // Vùng quá rộng — không phải loop, reset
+                resetLoopSignal(signal);
+              }
+            }
+            signal.loopLastDirection = "backward";
+            if (signal.loopStartedAt === null) signal.loopStartedAt = timestamp;
+            signal.loopZoneMin = Number.isInteger(signal.loopZoneMin)
+              ? Math.min(signal.loopZoneMin, wordIndex)
+              : wordIndex;
+            signal.loopZoneMax = Number.isInteger(signal.loopZoneMax)
+              ? Math.max(signal.loopZoneMax, signal.lastWordIndex)
+              : signal.lastWordIndex;
+
+            // --- Regression tracking ---
+            const backwardGapMs = Number.isFinite(signal.regressionLastBackwardAt)
+              ? timestamp - signal.regressionLastBackwardAt
+              : 0;
+            const shouldStartRegressionRun =
+              signal.regressionStartedAt === null ||
+              backwardGapMs > LOCAL_FALLBACK_REGRESSION_MAX_GAP_MS ||
+              !Number.isInteger(signal.regressionStartWordIndex);
+
+            if (shouldStartRegressionRun) {
+              signal.regressionStartedAt = Number.isFinite(signal.lastObservedAt)
+                ? signal.lastObservedAt
+                : timestamp;
+              signal.regressionStartWordIndex = signal.lastWordIndex;
+              signal.regressionLowestWordIndex = wordIndex;
+              signal.regressionStepCount = 1;
+            } else {
+              signal.regressionLowestWordIndex = Math.min(
+                signal.regressionLowestWordIndex,
                 wordIndex,
-                reason: "local-regression-backtrack",
-              });
+              );
+              signal.regressionStepCount += 1;
+            }
+
+            signal.regressionLastBackwardAt = timestamp;
+
+            const regressionDurationMs = timestamp - signal.regressionStartedAt;
+            const totalBacktrackDelta =
+              signal.regressionStartWordIndex - signal.regressionLowestWordIndex;
+
+            // OVERSHOOT GUARD: khi wrap dòng, chuột thường landing overshoot vào word
+            // cao hơn đích (ví dụ 24/25) rồi kéo nhanh về đầu dòng mới (22).
+            // Pattern này xảy ra rất nhanh (< 600ms), ít bước (≤ 2), lùi không nhiều (≤ 4 từ).
+            // Regression thật của trẻ chậm hơn và có nhiều bước lùi hơn.
+            const isLikelyLineWrapOvershoot =
+              regressionDurationMs < 600 &&
+              totalBacktrackDelta <= 4 &&
+              signal.regressionStepCount <= 2;
+
+            if (isLikelyLineWrapOvershoot) {
+              // Reset cả regression lẫn loop để tránh stepCount cộng dồn sai
+              resetRegressionSignal(signal);
+              resetLoopSignal(signal);
+            }
+
+            const hasSustainedRegression =
+              !isLikelyLineWrapOvershoot &&
+              regressionDurationMs > LOCAL_FALLBACK_REGRESSION_MIN_DURATION_MS &&
+              totalBacktrackDelta >= LOCAL_FALLBACK_REGRESSION_MIN_TOTAL_DELTA &&
+              signal.regressionStepCount >= LOCAL_FALLBACK_REGRESSION_MIN_EVENTS;
+
+            // LOOP fire độc lập với hasSustainedRegression —
+            // không cần đủ duration/delta, chỉ cần đủ direction changes.
+            const hasLoopPattern =
+              !isLikelyLineWrapOvershoot &&
+              signal.loopDirectionChanges >= LOOP_MIN_DIRECTION_CHANGES;
+
+            if (hasLoopPattern) {
+              isRegressionReady = true;
+              signal.regressionReadyAt = timestamp;
+              signal.regressionReadyWordIndex = wordIndex;
+              resetRegressionSignal(signal, { clearReadiness: false });
+              resetLoopSignal(signal);
+              if (localFallbackAllowedRef.current) {
+                triggerLocalFallbackIntervention({
+                  wordIndex,
+                  reason: "local-loop-oscillation",
+                  regressionType: "LOOP",
+                  regressionFocusRadius: 3,
+                });
+              }
+            } else if (hasSustainedRegression) {
+              const sustainedRegressionType = totalBacktrackDelta >= 4 ? "STRONG" : "MILD";
+              const sustainedFocusRadius =
+                sustainedRegressionType === "STRONG"
+                  ? Math.max(1, totalBacktrackDelta - 1)
+                  : 0;
+
+              isRegressionReady = true;
+              signal.regressionReadyAt = timestamp;
+              signal.regressionReadyWordIndex = wordIndex;
+              resetRegressionSignal(signal, { clearReadiness: false });
+              resetLoopSignal(signal);
+              if (localFallbackAllowedRef.current) {
+                triggerLocalFallbackIntervention({
+                  wordIndex,
+                  reason: "local-regression-backtrack",
+                  regressionType: sustainedRegressionType,
+                  regressionFocusRadius: sustainedFocusRadius,
+                });
+              }
             }
           }
         } else if (wordDelta > 0) {
@@ -720,6 +900,13 @@ const useReadingDualInterventionSession = ({
           signal.loopZoneMax = Number.isInteger(signal.loopZoneMax)
             ? Math.max(signal.loopZoneMax, wordIndex)
             : wordIndex;
+
+          if (didMoveToLowerVisualLine) {
+            signal.lineWrapSettleStartedAt = timestamp;
+            signal.lineWrapSettleLandingWordIndex = wordIndex;
+            signal.lineWrapSettleLineTop = wordLayout.top;
+            signal.lineWrapSettleLowestWordIndex = wordIndex;
+          }
 
           // Tiến ra ngoài vùng loop → reset loop
           if (
@@ -748,6 +935,8 @@ const useReadingDualInterventionSession = ({
 
       signal.lastWordIndex = wordIndex;
       signal.lastObservedAt = timestamp;
+      signal.lastWordLayoutTop = Number.isFinite(wordLayout?.top) ? wordLayout.top : null;
+      signal.lastWordLayoutLeft = Number.isFinite(wordLayout?.left) ? wordLayout.left : null;
       return isRegressionReady;
     },
     [triggerLocalFallbackIntervention],
@@ -797,6 +986,7 @@ const useReadingDualInterventionSession = ({
         triggerLocalFallbackIntervention({
           wordIndex,
           reason: "local-dwell-stall",
+          state: ADAPTATION_STATES.DISTRACTION,
         });
       }
       return true;
@@ -807,6 +997,19 @@ const useReadingDualInterventionSession = ({
   const applyAdaptationPayload = useCallback(
     (payload) => {
       if (!payload) return;
+
+      const now = Date.now();
+      const payloadWordIndex = toIntegerOrNull(payload.wordIndex);
+      if (
+        payload.state === ADAPTATION_STATES.REGRESSION &&
+        isWordInsideLineWrapSettleZone({
+          signal: localFallbackSignalRef.current,
+          wordIndex: payloadWordIndex,
+          timestamp: now,
+        })
+      ) {
+        return;
+      }
 
       emitAdaptationState(payload, { source: "backend" });
 
@@ -823,7 +1026,7 @@ const useReadingDualInterventionSession = ({
           localFallbackActive: false,
           localFallbackReason: "",
           localFallbackWordIndex: null,
-          lastUpdateAt: Date.now(),
+          lastUpdateAt: now,
         }));
 
         setWordIntervention((previous) => ({
@@ -852,28 +1055,24 @@ const useReadingDualInterventionSession = ({
             Number.isInteger(signal.regressionLowestWordIndex)
             ? signal.regressionStartWordIndex - signal.regressionLowestWordIndex
             : 0;
-        const stepCount = signal.regressionStepCount ?? 0;
-
-        const regressionType =
-          stepCount >= 4 ? "LOOP"
-            : backtrackDelta >= 4 ? "STRONG"
-              : backtrackDelta >= 2 ? "MILD"
-                : "MILD";
+        const regressionType = normalizeRegressionType(payload);
 
         const regressionFocusRadius =
-          regressionType === "STRONG" ? Math.max(1, backtrackDelta - 1)
-            : regressionType === "LOOP" ? 3
-              : 0;
+          regressionType === "STRONG"
+            ? resolveFocusRadius(payload, Math.max(1, backtrackDelta - 1))
+            : regressionType === "LOOP"
+              ? resolveFocusRadius(payload, 3)
+              : resolveFocusRadius(payload, 0);
 
         setWordIntervention((previous) => ({
           ...previous,
-          regressionWordIndex: payload.wordIndex ?? null,
+          regressionWordIndex: payloadWordIndex,
           regressionType,
           regressionFocusRadius,
           distractionWordIndex: null,
-          semanticWordIndex: payload.wordIndex ?? null,
+          semanticWordIndex: null,
         }));
-        activeInterventionWordIndexRef.current = payload.wordIndex ?? null;
+        activeInterventionWordIndexRef.current = payloadWordIndex;
       } else {
         setWordIntervention((previous) => ({
           ...previous,
@@ -908,7 +1107,13 @@ const useReadingDualInterventionSession = ({
 
       armFluentTimer();
     },
-    [armFluentTimer, clearDistractionTimer, clearFluentTimer, emitAdaptationState, resetFluentUi],
+    [
+      armFluentTimer,
+      clearDistractionTimer,
+      clearFluentTimer,
+      emitAdaptationState,
+      resetFluentUi,
+    ],
   );
 
   const isAdaptationBehaviorReady = useCallback((payload, timestamp = Date.now()) => {
@@ -958,16 +1163,13 @@ const useReadingDualInterventionSession = ({
   );
 
   const shouldDelayAdaptationPayload = useCallback(
-    (payload, timestamp = Date.now()) => {
-      if (isAdaptationBehaviorReady(payload, timestamp)) return false;
-
-      pendingAdaptationRef.current = {
-        payload,
-        receivedAt: timestamp,
-      };
-      return true;
+    () => {
+      // Backend rolling-window classifications are the source of truth. Local
+      // readiness only powers local fallback, not backend adaptation gating.
+      pendingAdaptationRef.current = null;
+      return false;
     },
-    [isAdaptationBehaviorReady],
+    [],
   );
 
   const handleSocketMessage = useCallback(
@@ -1009,33 +1211,13 @@ const useReadingDualInterventionSession = ({
       }
 
       if (interpreted.type === "tooltip") {
-        countInbound("tooltip", rawEventName);
-        const tooltip = createTooltipFromSocketPayload({
-          payload: interpreted.payload,
-          currentWordIndex: currentWordIndexRef.current,
-          resolveTooltipByWordIndex: resolveTooltipByWordIndexRef.current,
-        });
-
-        setActiveTooltip(tooltip);
-
-        if (Number.isInteger(tooltip.wordIndex)) {
-          setWordIntervention((previous) => ({
-            ...previous,
-            semanticWordIndex: tooltip.wordIndex,
-          }));
-        } else {
-          setWordIntervention((previous) => ({
-            ...previous,
-            semanticWordIndex: null,
-          }));
-        }
-
-        armFluentTimer();
+        countDisabledTooltipInbound();
+        return;
       }
     },
     [
       applyAdaptationPayload,
-      armFluentTimer,
+      countDisabledTooltipInbound,
       countInbound,
       clearDistractionTimer,
       clearFluentTimer,
@@ -1044,14 +1226,13 @@ const useReadingDualInterventionSession = ({
     ],
   );
 
-  const endSession = useCallback(() => {
+  const endSession = useCallback((metadata = {}) => {
     closeIntentRef.current = true;
     clearReconnectTimer();
     clearDwellTimer();
 
     flushPoints();
-    sendTrackedEvent(createSessionEndEvent());
-    lastAckedTooltipIdRef.current = "";
+    sendTrackedEvent(createSessionEndEvent(metadata));
 
     clearFlushTimer();
     clearFluentTimer();
@@ -1165,7 +1346,6 @@ const useReadingDualInterventionSession = ({
 
     const nextSessionId = createTrackingSessionId();
     sessionIdRef.current = nextSessionId;
-    lastAckedTooltipIdRef.current = "";
 
     markDebug({
       authTokenReady: true,
@@ -1392,7 +1572,7 @@ const useReadingDualInterventionSession = ({
 
       const timestamp = Date.now();
       const activeWordIndex = currentWordIndexRef.current;
-      const isDwellReady = evaluateDwellFallbackByPointer({
+      evaluateDwellFallbackByPointer({
         wordIndex: activeWordIndex,
         x: pointer.x,
         y: pointer.y,
@@ -1402,7 +1582,7 @@ const useReadingDualInterventionSession = ({
 
       flushPendingAdaptationIfReady({ timestamp });
 
-      if (isDwellReady) {
+      if (Number.isInteger(activeWordIndex) && activeWordIndex >= 0) {
         appendTrackingPoint({
           x: pointer.x,
           y: pointer.y,
@@ -1436,6 +1616,7 @@ const useReadingDualInterventionSession = ({
 
     let resolvedWordIndex = currentWordIndexRef.current;
     const wordElement = event.target?.closest?.("[data-word-index]");
+    const wordLayout = getWordLayoutSnapshot(wordElement);
     if (wordElement) {
       const parsed = toIntegerOrNull(wordElement.getAttribute("data-word-index"));
       if (parsed !== null && parsed >= 0) {
@@ -1455,6 +1636,7 @@ const useReadingDualInterventionSession = ({
     evaluateRegressionFallbackByWordIndex({
       wordIndex: resolvedWordIndex,
       timestamp,
+      wordLayout,
     });
 
     evaluateDwellFallbackByPointer({
@@ -1507,32 +1689,17 @@ const useReadingDualInterventionSession = ({
     resetLocalFallbackSignal();
   }, [resetLocalFallbackSignal]);
 
-  const handleTooltipRendered = useCallback(
-    (tooltip) => {
-      if (!tooltip?.visible) return;
-      if (lastAckedTooltipIdRef.current === tooltip.id) return;
-
-      sendTrackedEvent(
-        createTooltipShownEvent({
-          tooltip,
-          cognitiveState: tooltip?.cognitiveState,
-        }),
-      );
-
-      lastAckedTooltipIdRef.current = tooltip.id;
-    },
-    [sendTrackedEvent],
-  );
+  const handleTooltipRendered = useCallback(() => {}, []);
 
   return {
     visualFlags,
     wordIntervention,
-    activeTooltip,
+    activeTooltip: null,
     trackingDebug,
     handleStoryPointerMove,
     handleStoryPointerLeave,
     handleTooltipRendered,
-    dismissTooltip: () => setActiveTooltip(null),
+    dismissTooltip: () => {},
     endSession,
   };
 };

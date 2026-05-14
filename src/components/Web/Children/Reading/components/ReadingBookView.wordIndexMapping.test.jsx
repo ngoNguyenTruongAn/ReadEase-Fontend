@@ -33,7 +33,7 @@ describe("ReadingBookView word index mapping", () => {
     ]);
   });
 
-  it("anchors tooltip to the matching word span when wordIndex is provided", () => {
+  it("does not render inline tooltip content when tooltip data is provided", () => {
     const { container } = render(
       <ReadingBookView
         pageText="con bò ăn cỏ"
@@ -60,11 +60,11 @@ describe("ReadingBookView word index mapping", () => {
     const targetWord = container.querySelector('.reading-word[data-word-index="1"]');
     expect(targetWord).toBeInTheDocument();
     expect(targetWord).toHaveTextContent("ăn");
-    expect(targetWord.querySelector(".reading-intervention-tooltip")).toBeInTheDocument();
-    expect(screen.getByText("hành động ăn")).toBeInTheDocument();
+    expect(targetWord.querySelector(".reading-intervention-tooltip")).not.toBeInTheDocument();
+    expect(screen.queryByText("hành động ăn")).not.toBeInTheDocument();
   });
 
-  it("shows floating tooltip fallback when no wordIndex anchor exists", () => {
+  it("does not render floating tooltip content when cursor tooltip data is provided", () => {
     render(
       <ReadingBookView
         pageText="con bò ăn cỏ"
@@ -91,8 +91,7 @@ describe("ReadingBookView word index mapping", () => {
     );
 
     const floatingTooltip = document.querySelector(".reading-floating-tooltip");
-    expect(floatingTooltip).toBeInTheDocument();
-    expect(floatingTooltip).toHaveTextContent("con bò");
+    expect(floatingTooltip).not.toBeInTheDocument();
   });
 
   it("uses hybrid segmented word text for hover-to-speech and dedupes repeated hovers", () => {

@@ -176,6 +176,7 @@ const LoginPage = () => {
       }
 
       // 💾 lưu token
+      localStorage.removeItem("childId");
       localStorage.setItem("access_token", token);
       if (refreshToken) localStorage.setItem("refresh_token", refreshToken);
       if (trackingToken) localStorage.setItem("tracking_token", trackingToken);
@@ -193,7 +194,10 @@ const LoginPage = () => {
 
       // Nếu backend trả token (dù login bị chặn vì chưa liên kết), lưu token để gọi my-invite-code.
       const tokenFromError = pickToken(err?.response?.data);
-      if (tokenFromError) localStorage.setItem("access_token", tokenFromError);
+      if (tokenFromError) {
+        localStorage.removeItem("childId");
+        localStorage.setItem("access_token", tokenFromError);
+      }
 
       setInviteInfo(null);
       setInviteError("");

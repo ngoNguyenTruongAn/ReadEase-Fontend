@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  createSessionEndEvent,
   createTooltipShownEvent,
   createTrackingPoint,
   getTrackingAuthTokenContext,
@@ -69,6 +70,45 @@ describe("trackingProtocol", () => {
         cognitiveState: "REGRESSION",
       },
     });
+
+    vi.useRealTimers();
+  });
+
+  it("includes reading session metadata in session end events", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-09T00:00:00.000Z"));
+
+    const event = createSessionEndEvent({
+      kind: "reading-session",
+      childId: "child-1",
+      contentId: "content-1",
+      summary: {
+        counts: {
+          fluent: 2,
+          distraction: 1,
+          regression: 1,
+          total: 4,
+        },
+      },
+    });
+
+    expect(event).toMatchObject({
+      event: "session:end",
+      data: {
+        kind: "reading-session",
+        childId: "child-1",
+        contentId: "content-1",
+        summary: {
+          counts: {
+            fluent: 2,
+            distraction: 1,
+            regression: 1,
+            total: 4,
+          },
+        },
+      },
+    });
+    expect(event.data.timestamp).toBe(Date.now());
 
     vi.useRealTimers();
   });

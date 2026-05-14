@@ -10,7 +10,15 @@ const pickProfile = (data) => {
   const root = data?.data ?? data?.user ?? data;
 
   return {
-    id: root?.id ?? root?.userId ?? data?.id,
+    id:
+      root?.id ??
+      root?._id ??
+      root?.user_id ??
+      root?.childId ??
+      root?.child_id ??
+      root?.child?.id ??
+      root?.userId ??
+      data?.id,
     email: root?.email ?? data?.email,
     role: root?.role ?? root?.roles?.[0] ?? data?.role,
   };
@@ -40,9 +48,14 @@ const ProfileLayout = () => {
 
         setProfile(parsedProfile);
 
-        const childId = localStorage.getItem("childId") || parsedProfile?.id;
+        const childId = String(parsedProfile?.id || "").trim();
 
-        if (!childId) return;
+        if (!childId) {
+          localStorage.removeItem("childId");
+          return;
+        }
+
+        localStorage.setItem("childId", childId);
 
         const collectionRes = await ChildrenAPI.getCollection(childId);
 
