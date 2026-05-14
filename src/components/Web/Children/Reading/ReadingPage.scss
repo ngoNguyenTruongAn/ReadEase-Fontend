@@ -24,6 +24,11 @@
 
 .reading-page {
   width: 100%;
+  --reading-book-padding: clamp(24px, 4vw, 42px);
+  --reading-book-content-width: 760px;
+  --reading-book-frame-width: calc(
+    var(--reading-book-content-width) + var(--reading-book-padding) + var(--reading-book-padding)
+  );
 }
 
 .reading-header {
@@ -80,6 +85,83 @@
   font-size: 0.96rem;
 }
 
+.reading-content-reveal {
+  animation: reading-content-fade-in 260ms ease-out both;
+}
+
+.reading-body--loading {
+  min-height: 360px;
+}
+
+.reading-book-stage,
+.reading-loading-panel {
+  grid-column: 2;
+  justify-self: center;
+  width: min(100%, var(--reading-book-frame-width));
+}
+
+.reading-book-stage .reading-book-view {
+  width: 100%;
+}
+
+.reading-loading-panel {
+  box-sizing: border-box;
+  min-height: 300px;
+  border-radius: 20px;
+  padding: var(--reading-book-padding);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow:
+    0 24px 54px rgba(25, 33, 54, 0.06),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.64);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  color: rgba(#455368, 0.84);
+}
+
+.reading-loading-spinner {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 4px solid rgba(#4ae3d0, 0.22);
+  border-top-color: rgba(#14b8a6, 0.72);
+  animation: reading-loading-spin 900ms linear infinite;
+}
+
+.reading-loading-title {
+  margin: 2px 0 0;
+  font-size: clamp(1rem, 1.4vw, 1.2rem);
+  font-weight: 800;
+  color: rgba(#455368, 0.9);
+}
+
+.reading-loading-copy {
+  margin: 0;
+  max-width: 320px;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: rgba(#6b778c, 0.82);
+}
+
+@keyframes reading-content-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes reading-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .reading-unavailable {
   margin: 0 auto;
   max-width: 760px;
@@ -113,9 +195,8 @@
 
 .reading-body {
   width: 100%;
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, var(--reading-book-frame-width)) minmax(0, 1fr);
   align-items: center;
   height: fit-content;
   box-sizing: border-box;
@@ -130,6 +211,8 @@
   align-items: flex-start;
   width: 52px;
   flex: 0 0 52px;
+  grid-column: 1;
+  justify-self: start;
   overflow: visible;
 }
 
@@ -227,12 +310,13 @@
 
 .reading-book-view {
   position: relative;
+  box-sizing: border-box;
   background: rgba(255, 255, 255, 0.9);
   border-radius: 20px;
-  width: min(100%, 760px);
+  width: min(100%, var(--reading-book-frame-width));
   height: max-content;
-  max-width: 760px;
-  padding: clamp(24px, 4vw, 42px);
+  max-width: var(--reading-book-frame-width);
+  padding: var(--reading-book-padding);
   box-shadow:
     0 24px 54px rgba(25, 33, 54, 0.08),
     inset 0 0 0 1px rgba(255, 255, 255, 0.6);
@@ -244,15 +328,14 @@
   width: 100%;
   margin: 0;
   color: $text-main;
-  font-size: clamp(1.56rem, 2.8vw, 2.95rem);
-  --reading-line-height: 1.36em;
-  line-height: 1.36;
+  font-size: clamp(1.54rem, 2.7vw, 2.9rem);
+  --reading-line-height: 1.4em;
+  line-height: 1.4;
   font-weight: 400;
-  text-align: justify;
-  text-align-last: left;
-  text-justify: inter-word;
+  text-align: left;
+  text-wrap: pretty;
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
   word-break: normal;
   transition: letter-spacing 0.5s ease-in-out, line-height 0.5s ease-in-out, color 0.3s ease;
 
@@ -260,7 +343,7 @@
 }
 
 // Bionic Reading: dùng offset shadow thay vì font-weight để tạo độ đậm
-// mà không thay đổi character width → justify layout không reflow.
+// mà không thay đổi character width → BookView layout không reflow.
 // blur-radius: 0 → shadow sắc nét, không nhòe như blur > 0.
 .reading-book-text strong {
   font-weight: inherit;
@@ -270,13 +353,27 @@
 }
 
 .reading-word {
-  display: inline;
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: baseline;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
   transition:
     background-color 380ms ease-in-out,
     box-shadow 380ms ease-in-out,
     opacity 380ms ease-in-out;
+}
+
+.reading-word--atomic {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: keep-all;
+}
+
+.reading-word--wrap-fallback {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .reading-word.intervention-target-word {
@@ -309,7 +406,9 @@
 }
 
 .reading-word-space {
-  white-space: break-spaces;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .reading-punctuation {
@@ -567,6 +666,8 @@
   flex-direction: column;
   align-items: center;
   gap: 12px;
+  grid-column: 3;
+  justify-self: end;
   overflow: visible;
 }
 
@@ -689,6 +790,7 @@
 
 @media (max-width: 980px) {
   .reading-body {
+    display: flex;
     flex-direction: column;
     align-items: stretch;
     padding-inline: 32px;
@@ -702,6 +804,8 @@
     align-items: center;
     width: auto;
     flex: 0 1 auto;
+    grid-column: auto;
+    justify-self: auto;
     overflow: visible;
     order: 2;
   }
@@ -739,12 +843,20 @@
     }
   }
 
-  .reading-book-view {
+  .reading-book-stage,
+  .reading-loading-panel {
+    grid-column: auto;
+    justify-self: auto;
     order: 1;
+  }
+
+  .reading-book-view {
     min-height: 340px;
   }
 
   .reading-score-panel {
+    grid-column: auto;
+    justify-self: auto;
     order: 3;
     flex-direction: row;
     justify-content: center;
@@ -762,6 +874,12 @@
 
   .reading-book-view {
     min-height: 260px;
+    border-radius: 16px;
+    padding: 18px;
+  }
+
+  .reading-loading-panel {
+    min-height: 240px;
     border-radius: 16px;
     padding: 18px;
   }

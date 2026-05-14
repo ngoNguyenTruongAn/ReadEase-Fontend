@@ -49,27 +49,63 @@ class MockWebSocket {
   }
 }
 
-const createPointerMoveEvent = ({ wordIndex, x, y, top, left, width = 40, height = 20 }) => ({
-  pointerType: "mouse",
-  clientX: x,
-  clientY: y,
-  target: {
-    closest: (selector) => {
-      if (selector !== "[data-word-index]") return null;
-      return {
-        getAttribute: () => String(wordIndex),
-        getBoundingClientRect: () => ({
-          top,
-          left,
-          right: Number.isFinite(left) ? left + width : undefined,
-          bottom: Number.isFinite(top) ? top + height : undefined,
-          width,
-          height,
-        }),
-      };
-    },
-  },
+const createRect = ({ top, left, width = 40, height = 20 }) => ({
+  top,
+  left,
+  right: Number.isFinite(left) ? left + width : undefined,
+  bottom: Number.isFinite(top) ? top + height : undefined,
+  width,
+  height,
 });
+
+const createPointerMoveEvent = ({
+  wordIndex,
+  x,
+  y,
+  top,
+  left,
+  width = 40,
+  height = 20,
+  wordLayouts = {},
+}) => {
+  const layoutsByWordIndex = new Map(
+    Object.entries({
+      ...wordLayouts,
+      [wordIndex]: { top, left, width, height },
+    }).map(([index, layout]) => [Number(index), layout]),
+  );
+
+  let rootElement;
+  const createWordElement = (index) => ({
+    getAttribute: () => String(index),
+    getBoundingClientRect: () => createRect(layoutsByWordIndex.get(index)),
+    closest: (selector) => (selector === ".reading-book-view" ? rootElement : null),
+    parentElement: rootElement,
+  });
+
+  rootElement = {
+    querySelector: (selector) => {
+      const match = /\.reading-word\[data-word-index="(-?\d+)"\]/.exec(selector);
+      if (!match) return null;
+      const index = Number(match[1]);
+      return layoutsByWordIndex.has(index) ? createWordElement(index) : null;
+    },
+  };
+
+  const currentWordElement = createWordElement(wordIndex);
+
+  return {
+    pointerType: "mouse",
+    clientX: x,
+    clientY: y,
+    target: {
+      closest: (selector) => {
+        if (selector !== "[data-word-index]") return null;
+        return currentWordElement;
+      },
+    },
+  };
+};
 
 const flushMicrotasks = async () => {
   await Promise.resolve();
@@ -605,6 +641,54 @@ describe("useReadingDualInterventionSession scenarios", () => {
     expect(result.current.trackingDebug.localFallbackInterventions).toBe(0);
   });
 
+  it("ignores same-line down-left sweep before local regression fallback", async () => {
+    localStorage.setItem(
+      "access_token",
+      createJwt({
+        sub: "user-line-end-sweep",
+        role: "ROLE_CHILD",
+      }),
+    );
+
+    const { result } = renderHook(() =>
+      useReadingDualInterventionSession({
+        enabled: true,
+        contentId: "story-line-end-sweep",
+        apiBaseUrl: "http://localhost:3000/api/v1/",
+        resolveTooltipByWordIndex: () => null,
+      }),
+    );
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    act(() => {
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({ wordIndex: 21, x: 535, y: 110, top: 100, left: 500 }),
+      );
+      vi.advanceTimersByTime(1100);
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({ wordIndex: 20, x: 500, y: 116, top: 100, left: 460 }),
+      );
+      vi.advanceTimersByTime(1100);
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({ wordIndex: 19, x: 460, y: 118, top: 100, left: 420 }),
+      );
+      vi.advanceTimersByTime(1100);
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({ wordIndex: 18, x: 420, y: 119, top: 100, left: 380 }),
+      );
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.visualFlags.isVisualActive).toBe(false);
+    expect(result.current.trackingDebug.localFallbackInterventions).toBe(0);
+  });
+
   it("retargets backend interventions to a new word without waiting for the old style timeout", async () => {
     localStorage.setItem(
       "tracking_token",
@@ -666,6 +750,126 @@ describe("useReadingDualInterventionSession scenarios", () => {
 
     expect(result.current.wordIntervention.regressionWordIndex).toBe(8);
     expect(result.current.visualFlags.isVisualActive).toBe(true);
+  });
+
+  it("resets page-scoped intervention and ignores stale backend events after page change", async () => {
+    localStorage.setItem(
+      "tracking_token",
+      createJwt({
+        user_id: "user-page-change",
+        session_id: "session-page-change",
+      }),
+    );
+
+    const { result, rerender } = renderHook(
+      ({ pageKey }) =>
+        useReadingDualInterventionSession({
+          enabled: true,
+          contentId: "story-page-change",
+          apiBaseUrl: "http://localhost:3000/api/v1/",
+          pageKey,
+        }),
+      {
+        initialProps: { pageKey: "page-1" },
+      },
+    );
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    const ws = MockWebSocket.instances[0];
+
+    act(() => {
+      ws.emitOpen();
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({ wordIndex: 18, x: 420, y: 520 }),
+      );
+      ws.emitMessage({
+        event: "adaptation:trigger",
+        data: {
+          state: "REGRESSION",
+          mode: "DUAL_INTERVENTION",
+          confidence: 0.9,
+          wordIndex: 18,
+        },
+      });
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(18);
+
+    act(() => {
+      rerender({ pageKey: "page-2" });
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.visualFlags.isVisualActive).toBe(false);
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(null);
+
+    act(() => {
+      ws.emitMessage({
+        event: "adaptation:trigger",
+        data: {
+          state: "REGRESSION",
+          mode: "DUAL_INTERVENTION",
+          confidence: 0.9,
+          wordIndex: 18,
+        },
+      });
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(null);
+
+    act(() => {
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({ wordIndex: 2, x: 160, y: 120 }),
+      );
+      vi.advanceTimersByTime(900);
+      ws.emitMessage({
+        event: "adaptation:trigger",
+        data: {
+          state: "REGRESSION",
+          mode: "DUAL_INTERVENTION",
+          confidence: 0.91,
+          wordIndex: 18,
+        },
+      });
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(null);
+
+    act(() => {
+      ws.emitMessage({
+        event: "adaptation:trigger",
+        data: {
+          state: "REGRESSION",
+          mode: "DUAL_INTERVENTION",
+          confidence: 0.91,
+          wordIndex: 2,
+        },
+      });
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(2);
   });
 
   it("holds backend regression retarget only while cursor is settling across a line wrap", async () => {
@@ -774,6 +978,308 @@ describe("useReadingDualInterventionSession scenarios", () => {
     expect(result.current.wordIntervention.regressionWordIndex).toBe(13);
   });
 
+  it("ignores backend regression while cursor is sweeping down-left across a line end", async () => {
+    localStorage.setItem(
+      "tracking_token",
+      createJwt({
+        user_id: "user-line-end-backend",
+        session_id: "session-line-end-backend",
+      }),
+    );
+
+    const { result } = renderHook(() =>
+      useReadingDualInterventionSession({
+        enabled: true,
+        contentId: "story-line-end-backend",
+        apiBaseUrl: "http://localhost:3000/api/v1/",
+      }),
+    );
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    const ws = MockWebSocket.instances[0];
+
+    act(() => {
+      ws.emitOpen();
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({ wordIndex: 21, x: 535, y: 110, top: 100, left: 500 }),
+      );
+      vi.advanceTimersByTime(300);
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({ wordIndex: 20, x: 500, y: 116, top: 100, left: 460 }),
+      );
+      ws.emitMessage({
+        event: "adaptation:trigger",
+        data: {
+          state: "REGRESSION",
+          mode: "DUAL_INTERVENTION",
+          confidence: 0.9,
+          wordIndex: 20,
+        },
+      });
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(null);
+
+    act(() => {
+      vi.advanceTimersByTime(2300);
+      ws.emitMessage({
+        event: "adaptation:trigger",
+        data: {
+          state: "REGRESSION",
+          mode: "DUAL_INTERVENTION",
+          confidence: 0.9,
+          wordIndex: 20,
+        },
+      });
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(20);
+  });
+
+  it("ignores backend regression on the old line-end word while cursor descends", async () => {
+    localStorage.setItem(
+      "tracking_token",
+      createJwt({
+        user_id: "user-line-end-anchor",
+        session_id: "session-line-end-anchor",
+      }),
+    );
+
+    const { result } = renderHook(() =>
+      useReadingDualInterventionSession({
+        enabled: true,
+        contentId: "story-line-end-anchor",
+        apiBaseUrl: "http://localhost:3000/api/v1/",
+      }),
+    );
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    const ws = MockWebSocket.instances[0];
+
+    act(() => {
+      ws.emitOpen();
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({
+          wordIndex: 21,
+          x: 526,
+          y: 110,
+          top: 100,
+          left: 500,
+          wordLayouts: {
+            22: { top: 132, left: 160 },
+          },
+        }),
+      );
+      vi.advanceTimersByTime(300);
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({
+          wordIndex: 21,
+          x: 528,
+          y: 116,
+          top: 100,
+          left: 500,
+          wordLayouts: {
+            22: { top: 132, left: 160 },
+          },
+        }),
+      );
+      ws.emitMessage({
+        event: "adaptation:trigger",
+        data: {
+          state: "REGRESSION",
+          mode: "DUAL_INTERVENTION",
+          confidence: 0.9,
+          wordIndex: 21,
+        },
+      });
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(null);
+
+    act(() => {
+      vi.advanceTimersByTime(2300);
+      ws.emitMessage({
+        event: "adaptation:trigger",
+        data: {
+          state: "REGRESSION",
+          mode: "DUAL_INTERVENTION",
+          confidence: 0.9,
+          wordIndex: 21,
+        },
+      });
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(21);
+  });
+
+  it("arms the line-end guard as soon as cursor reaches the old line-end word", async () => {
+    localStorage.setItem(
+      "tracking_token",
+      createJwt({
+        user_id: "user-line-end-enter",
+        session_id: "session-line-end-enter",
+      }),
+    );
+
+    const { result } = renderHook(() =>
+      useReadingDualInterventionSession({
+        enabled: true,
+        contentId: "story-line-end-enter",
+        apiBaseUrl: "http://localhost:3000/api/v1/",
+      }),
+    );
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    const ws = MockWebSocket.instances[0];
+
+    act(() => {
+      ws.emitOpen();
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({ wordIndex: 20, x: 490, y: 110, top: 100, left: 460 }),
+      );
+      vi.advanceTimersByTime(120);
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({
+          wordIndex: 21,
+          x: 526,
+          y: 116,
+          top: 100,
+          left: 500,
+          wordLayouts: {
+            22: { top: 132, left: 160 },
+          },
+        }),
+      );
+      ws.emitMessage({
+        event: "adaptation:trigger",
+        data: {
+          state: "REGRESSION",
+          mode: "DUAL_INTERVENTION",
+          confidence: 0.9,
+          wordIndex: 21,
+        },
+      });
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(null);
+  });
+
+  it("keeps a lower-line end-word touch from retargeting regression during zigzag", async () => {
+    localStorage.setItem(
+      "tracking_token",
+      createJwt({
+        user_id: "user-next-line-end-zigzag",
+        session_id: "session-next-line-end-zigzag",
+      }),
+    );
+
+    const { result } = renderHook(() =>
+      useReadingDualInterventionSession({
+        enabled: true,
+        contentId: "story-next-line-end-zigzag",
+        apiBaseUrl: "http://localhost:3000/api/v1/",
+      }),
+    );
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    const ws = MockWebSocket.instances[0];
+
+    act(() => {
+      ws.emitOpen();
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({
+          wordIndex: 21,
+          x: 510,
+          y: 104,
+          top: 100,
+          left: 500,
+          wordLayouts: {
+            22: { top: 132, left: 160 },
+          },
+        }),
+      );
+      ws.emitMessage({
+        event: "adaptation:trigger",
+        data: {
+          state: "REGRESSION",
+          mode: "DUAL_INTERVENTION",
+          confidence: 0.9,
+          wordIndex: 21,
+        },
+      });
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(21);
+
+    act(() => {
+      vi.advanceTimersByTime(300);
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({
+          wordIndex: 35,
+          x: 510,
+          y: 138,
+          top: 132,
+          left: 500,
+          wordLayouts: {
+            34: { top: 132, left: 460 },
+            36: { top: 164, left: 160 },
+          },
+        }),
+      );
+      ws.emitMessage({
+        event: "adaptation:trigger",
+        data: {
+          state: "REGRESSION",
+          mode: "DUAL_INTERVENTION",
+          confidence: 0.92,
+          wordIndex: 35,
+        },
+      });
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(21);
+  });
+
   it("classifies local oscillation fallback as LOOP", async () => {
     localStorage.setItem(
       "access_token",
@@ -864,5 +1370,173 @@ describe("useReadingDualInterventionSession scenarios", () => {
     expect(result.current.wordIntervention.distractionWordIndex).toBe(7);
     expect(result.current.wordIntervention.regressionWordIndex).toBe(null);
     expect(result.current.trackingDebug.localFallbackReason).toBe("local-dwell-stall");
+  });
+
+  it("does not treat slow in-word cursor progress as local dwell", async () => {
+    localStorage.setItem(
+      "access_token",
+      createJwt({
+        sub: "user-slow-word-progress",
+        role: "ROLE_CHILD",
+      }),
+    );
+
+    const { result } = renderHook(() =>
+      useReadingDualInterventionSession({
+        enabled: true,
+        contentId: "story-slow-word-progress",
+        apiBaseUrl: "http://localhost:3000/api/v1/",
+        resolveTooltipByWordIndex: () => null,
+      }),
+    );
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    act(() => {
+      for (let step = 0; step < 8; step += 1) {
+        result.current.handleStoryPointerMove(
+          createPointerMoveEvent({
+            wordIndex: 7,
+            x: 200 + step,
+            y: 120,
+            top: 110,
+            left: 180,
+            width: 120,
+          }),
+        );
+        vi.advanceTimersByTime(700);
+      }
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.visualFlags.isVisualActive).toBe(false);
+    expect(result.current.wordIntervention.distractionWordIndex).toBe(null);
+    expect(result.current.trackingDebug.localFallbackInterventions).toBe(0);
+  });
+
+  it("delays backend distraction while cursor is still progressing inside a long word", async () => {
+    localStorage.setItem(
+      "tracking_token",
+      createJwt({
+        user_id: "user-backend-slow-word-progress",
+        session_id: "session-backend-slow-word-progress",
+      }),
+    );
+
+    const { result } = renderHook(() =>
+      useReadingDualInterventionSession({
+        enabled: true,
+        contentId: "story-backend-slow-word-progress",
+        apiBaseUrl: "http://localhost:3000/api/v1/",
+      }),
+    );
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    const ws = MockWebSocket.instances[0];
+
+    act(() => {
+      ws.emitOpen();
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({
+          wordIndex: 7,
+          x: 200,
+          y: 120,
+          top: 110,
+          left: 180,
+          width: 120,
+        }),
+      );
+      vi.advanceTimersByTime(700);
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({
+          wordIndex: 7,
+          x: 201,
+          y: 120,
+          top: 110,
+          left: 180,
+          width: 120,
+        }),
+      );
+      ws.emitMessage({
+        event: "adaptation:trigger",
+        data: {
+          state: "DISTRACTION",
+          mode: "VISUAL_ONLY",
+          confidence: 0.86,
+          wordIndex: 7,
+        },
+      });
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.visualFlags.isVisualActive).toBe(false);
+    expect(result.current.wordIntervention.distractionWordIndex).toBe(null);
+  });
+
+  it("applies delayed backend distraction after the cursor is truly stationary", async () => {
+    localStorage.setItem(
+      "tracking_token",
+      createJwt({
+        user_id: "user-backend-stationary-dwell",
+        session_id: "session-backend-stationary-dwell",
+      }),
+    );
+
+    const { result } = renderHook(() =>
+      useReadingDualInterventionSession({
+        enabled: true,
+        contentId: "story-backend-stationary-dwell",
+        apiBaseUrl: "http://localhost:3000/api/v1/",
+      }),
+    );
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    const ws = MockWebSocket.instances[0];
+
+    act(() => {
+      ws.emitOpen();
+      result.current.handleStoryPointerMove(
+        createPointerMoveEvent({ wordIndex: 7, x: 200, y: 120 }),
+      );
+      ws.emitMessage({
+        event: "adaptation:trigger",
+        data: {
+          state: "DISTRACTION",
+          mode: "VISUAL_ONLY",
+          confidence: 0.86,
+          wordIndex: 7,
+        },
+      });
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.wordIntervention.distractionWordIndex).toBe(null);
+
+    act(() => {
+      vi.advanceTimersByTime(4400);
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.wordIntervention.distractionWordIndex).toBe(7);
   });
 });

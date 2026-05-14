@@ -64,4 +64,25 @@ describe("hybridVietnameseSegmentation", () => {
     expect(renderedText).not.toContain("lấp ,");
     expect(renderedText).not.toContain("giếng .");
   });
+
+  it("normalizes extra spaces inside quoted text without changing word indexes", () => {
+    const tokens = parseHybridVietnameseTokens('" Con vao rung " . Anh noi " Khac nhap " de gan ket');
+    const renderedText = tokens.map((token) => token.value).join("");
+    const words = tokens.filter((token) => token.type === "word");
+
+    expect(renderedText).toBe('"Con vao rung". Anh noi "Khac nhap" de gan ket');
+    expect(words.map((token) => token.wordIndex)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(words.map((token) => token.normalized)).toEqual([
+      "Con",
+      "vao",
+      "rung",
+      "Anh",
+      "noi",
+      "Khac",
+      "nhap",
+      "de",
+      "gan",
+      "ket",
+    ]);
+  });
 });

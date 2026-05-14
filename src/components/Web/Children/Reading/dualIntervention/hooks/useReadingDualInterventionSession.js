@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   DEFAULT_FLUENT_TIMEOUT_MS,
   DEFAULT_FLUSH_INTERVAL_MS,
@@ -91,9 +91,12 @@ const QUICK_CLOSE_THRESHOLD_MS = 180;
 const LOCAL_FALLBACK_COOLDOWN_MS = import.meta.env.DEV ? 6000 : 3600;
 // The long cooldown is for same-word repeats; different words retarget with this shorter gap.
 const LOCAL_FALLBACK_INTERRUPT_GAP_MS = 800;
+const PAGE_CHANGE_STALE_EVENT_GUARD_MS = 900;
 const LOCAL_FALLBACK_SIGNAL_RESET_MS = 5000;
 const LOCAL_FALLBACK_DWELL_MIN_MS = 4200;
 const LOCAL_FALLBACK_DWELL_POINTER_TOLERANCE_PX = 6;
+const LOCAL_FALLBACK_DWELL_MOTION_STEP_PX = 0.75;
+const LOCAL_FALLBACK_DWELL_MOTION_RESET_PX = 3;
 // DEV_TEST_MODE: hạ threshold để dễ trigger REGRESSION khi test thủ công,
 // nhưng vẫn đủ cao để không bắt zigzag tự nhiên khi di chuột đọc bình thường.
 // Trước khi release, restore về: MIN_TOTAL_DELTA=2, MIN_EVENTS=2, MIN_DURATION_MS=3000, MAX_GAP_MS=1800
@@ -109,6 +112,11 @@ const LINE_WRAP_LEFTWARD_THRESHOLD_PX = 12;
 const LINE_WRAP_SETTLE_TTL_MS = 2200;
 const LINE_WRAP_SETTLE_MAX_BACKTRACK_WORDS = 6;
 const LINE_WRAP_SETTLE_MAX_FORWARD_WORDS = 4;
+const LINE_WRAP_DESCENT_MIN_VERTICAL_PX = 2;
+const LINE_WRAP_DESCENT_MIN_LEFTWARD_PX = 4;
+const LINE_WRAP_DESCENT_MAX_RIGHTWARD_PX = 8;
+const LINE_WRAP_DESCENT_LOWER_WORD_RATIO = 0.45;
+const LINE_WRAP_DESCENT_RIGHT_EDGE_RATIO = 0.35;
 
 const HANDSHAKE_VARIANTS = [
   "tracking:token-only",
@@ -125,6 +133,10 @@ const createInitialLocalFallbackSignal = (lastTriggeredAt = 0) => ({
   dwellStartedAt: null,
   dwellX: null,
   dwellY: null,
+  dwellLastX: null,
+  dwellLastY: null,
+  dwellMotionDistance: 0,
+  dwellLastMotionAt: null,
   lastObservedAt: null,
   lastTriggeredAt,
   dwellReadyAt: null,
@@ -143,10 +155,10 @@ const createInitialLocalFallbackSignal = (lastTriggeredAt = 0) => ({
   loopStartedAt: null,
   lastWordLayoutTop: null,
   lastWordLayoutLeft: null,
-  lineWrapSettleStartedAt: null,
-  lineWrapSettleLandingWordIndex: null,
-  lineWrapSettleLineTop: null,
-  lineWrapSettleLowestWordIndex: null,
+  lineWrapGuardStartedAt: null,
+  lineWrapGuardMinWordIndex: null,
+  lineWrapGuardMaxWordIndex: null,
+  lineWrapGuardLineTop: null,
 });
 
 const resetRegressionSignal = (signal, { clearReadiness = true } = {}) => {
@@ -169,11 +181,11 @@ const resetLoopSignal = (signal) => {
   signal.loopStartedAt = null;
 };
 
-const resetLineWrapSettleSignal = (signal) => {
-  signal.lineWrapSettleStartedAt = null;
-  signal.lineWrapSettleLandingWordIndex = null;
-  signal.lineWrapSettleLineTop = null;
-  signal.lineWrapSettleLowestWordIndex = null;
+const resetLineWrapGuard = (signal) => {
+  signal.lineWrapGuardStartedAt = null;
+  signal.lineWrapGuardMinWordIndex = null;
+  signal.lineWrapGuardMaxWordIndex = null;
+  signal.lineWrapGuardLineTop = null;
 };
 
 // Vùng hẹp tối đa để tính là LOOP (số từ)
@@ -233,8 +245,30 @@ const getWordLayoutSnapshot = (wordElement) => {
   const left = Number(rect.left);
   if (!Number.isFinite(top) || !Number.isFinite(left)) return null;
 
-  return { top, left };
+  const width = Number(rect.width);
+  const height = Number(rect.height);
+  const right = Number.isFinite(Number(rect.right))
+    ? Number(rect.right)
+    : Number.isFinite(width)
+      ? left + width
+      : null;
+  const bottom = Number.isFinite(Number(rect.bottom))
+    ? Number(rect.bottom)
+    : Number.isFinite(height)
+      ? top + height
+      : null;
+
+  return { top, left, right, bottom, width, height };
 };
+
+const getWordElementByIndex = (wordElement, wordIndex) => {
+  if (!Number.isInteger(wordIndex)) return null;
+  const root = wordElement?.closest?.(".reading-book-view") || wordElement?.parentElement;
+  return root?.querySelector?.(`.reading-word[data-word-index="${wordIndex}"]`) || null;
+};
+
+const getAdjacentWordLayoutSnapshot = (wordElement, wordIndex, offset) =>
+  getWordLayoutSnapshot(getWordElementByIndex(wordElement, wordIndex + offset));
 
 const isSameVisualLine = (leftTop, rightTop) =>
   Number.isFinite(leftTop) &&
@@ -252,16 +286,134 @@ const isLikelyLineWrapForward = ({ previousTop, nextTop, previousLeft, nextLeft 
   Number.isFinite(nextLeft) &&
   previousLeft - nextLeft > LINE_WRAP_LEFTWARD_THRESHOLD_PX;
 
-const isWordInsideLineWrapSettleZone = ({ signal, wordIndex, timestamp }) => {
-  if (!Number.isInteger(wordIndex) || wordIndex < 0) return false;
-  if (!Number.isFinite(signal.lineWrapSettleStartedAt)) return false;
-  if (!Number.isInteger(signal.lineWrapSettleLandingWordIndex)) return false;
-  if (timestamp - signal.lineWrapSettleStartedAt > LINE_WRAP_SETTLE_TTL_MS) return false;
+const isForwardLowerLineTransition = ({ wordDelta, previousTop, nextTop }) =>
+  wordDelta > 0 && isLowerVisualLine(previousTop, nextTop);
 
-  const landingWordIndex = signal.lineWrapSettleLandingWordIndex;
+const isPointerInLineWrapDescentZone = ({ wordLayout, pointerX, pointerY }) => {
+  if (!wordLayout) return false;
+  if (!Number.isFinite(pointerX) || !Number.isFinite(pointerY)) return false;
+  if (!Number.isFinite(wordLayout.width) || !Number.isFinite(wordLayout.height)) return false;
+
+  const lowerWordY = wordLayout.top + wordLayout.height * LINE_WRAP_DESCENT_LOWER_WORD_RATIO;
+  const transitionX = wordLayout.left + wordLayout.width * LINE_WRAP_DESCENT_RIGHT_EDGE_RATIO;
+  return pointerY >= lowerWordY && pointerX >= transitionX;
+};
+
+const isLikelyLineWrapDescentBacktrack = ({
+  previousTop,
+  nextLayout,
+  previousPointer,
+  pointerX,
+  pointerY,
+}) => {
+  if (!nextLayout) return false;
+  if (!isSameVisualLine(previousTop, nextLayout.top)) return false;
+  if (!Number.isFinite(pointerX) || !Number.isFinite(pointerY)) return false;
+  if (!Number.isFinite(previousPointer?.x) || !Number.isFinite(previousPointer?.y)) return false;
+  if (!Number.isFinite(nextLayout.width) || !Number.isFinite(nextLayout.height)) return false;
+
+  const pointerDeltaX = pointerX - previousPointer.x;
+  const pointerDeltaY = pointerY - previousPointer.y;
   return (
-    wordIndex >= landingWordIndex - LINE_WRAP_SETTLE_MAX_BACKTRACK_WORDS &&
-    wordIndex <= landingWordIndex + LINE_WRAP_SETTLE_MAX_FORWARD_WORDS
+    pointerDeltaY >= LINE_WRAP_DESCENT_MIN_VERTICAL_PX &&
+    pointerDeltaX <= -LINE_WRAP_DESCENT_MIN_LEFTWARD_PX &&
+    isPointerInLineWrapDescentZone({ wordLayout: nextLayout, pointerX, pointerY })
+  );
+};
+
+const isLikelyLineWrapDescentAnchor = ({ wordLayout, previousPointer, pointerX, pointerY }) => {
+  if (!wordLayout) return false;
+  if (!Number.isFinite(pointerX) || !Number.isFinite(pointerY)) return false;
+  if (!Number.isFinite(previousPointer?.x) || !Number.isFinite(previousPointer?.y)) return false;
+  if (!Number.isFinite(wordLayout.width) || !Number.isFinite(wordLayout.height)) return false;
+
+  const pointerDeltaX = pointerX - previousPointer.x;
+  const pointerDeltaY = pointerY - previousPointer.y;
+  return (
+    pointerDeltaY >= LINE_WRAP_DESCENT_MIN_VERTICAL_PX &&
+    pointerDeltaX <= LINE_WRAP_DESCENT_MAX_RIGHTWARD_PX &&
+    isPointerInLineWrapDescentZone({ wordLayout, pointerX, pointerY })
+  );
+};
+
+const isVisualLineEndWord = ({ wordLayout, nextWordLayout }) =>
+  isLikelyLineWrapForward({
+    previousTop: wordLayout?.top,
+    nextTop: nextWordLayout?.top,
+    previousLeft: wordLayout?.left,
+    nextLeft: nextWordLayout?.left,
+  });
+
+const armLineWrapGuard = ({
+  signal,
+  timestamp,
+  anchorWordIndex,
+  lineTop,
+  extraWordIndexes = [],
+}) => {
+  const indexes = [anchorWordIndex, ...extraWordIndexes].filter((index) =>
+    Number.isInteger(index),
+  );
+  if (!indexes.length) return;
+
+  const minWordIndex = Math.min(...indexes) - LINE_WRAP_SETTLE_MAX_BACKTRACK_WORDS;
+  const maxWordIndex = Math.max(...indexes) + LINE_WRAP_SETTLE_MAX_FORWARD_WORDS;
+  const hasActiveGuard =
+    Number.isFinite(signal.lineWrapGuardStartedAt) &&
+    timestamp - signal.lineWrapGuardStartedAt <= LINE_WRAP_SETTLE_TTL_MS &&
+    Number.isInteger(signal.lineWrapGuardMinWordIndex) &&
+    Number.isInteger(signal.lineWrapGuardMaxWordIndex);
+  const shouldMergeWithActiveGuard =
+    hasActiveGuard &&
+    indexes.some(
+      (index) =>
+        index >= signal.lineWrapGuardMinWordIndex &&
+        index <= signal.lineWrapGuardMaxWordIndex,
+    );
+
+  signal.lineWrapGuardStartedAt = timestamp;
+  signal.lineWrapGuardMinWordIndex = shouldMergeWithActiveGuard
+    ? Math.min(signal.lineWrapGuardMinWordIndex, minWordIndex)
+    : minWordIndex;
+  signal.lineWrapGuardMaxWordIndex = shouldMergeWithActiveGuard
+    ? Math.max(signal.lineWrapGuardMaxWordIndex, maxWordIndex)
+    : maxWordIndex;
+  signal.lineWrapGuardLineTop = Number.isFinite(lineTop) ? lineTop : null;
+};
+
+const clearRegressionDuringLineWrapGuard = (signal) => {
+  resetRegressionSignal(signal);
+  resetLoopSignal(signal);
+};
+
+const resetDwellSignal = ({ signal, wordIndex, x, y, timestamp, markMotion = false }) => {
+  signal.dwellWordIndex = wordIndex;
+  signal.dwellStartedAt = timestamp;
+  signal.dwellX = x;
+  signal.dwellY = y;
+  signal.dwellLastX = x;
+  signal.dwellLastY = y;
+  signal.dwellMotionDistance = 0;
+  signal.dwellLastMotionAt = markMotion ? timestamp : null;
+  signal.dwellReadyAt = null;
+};
+
+const resolveDwellStationaryStartedAt = (signal) => {
+  if (!Number.isFinite(signal.dwellStartedAt)) return null;
+  if (!Number.isFinite(signal.dwellLastMotionAt)) return signal.dwellStartedAt;
+  return Math.max(signal.dwellStartedAt, signal.dwellLastMotionAt);
+};
+
+const isWordInsideLineWrapGuard = ({ signal, wordIndex, timestamp }) => {
+  if (!Number.isInteger(wordIndex) || wordIndex < 0) return false;
+  if (!Number.isFinite(signal.lineWrapGuardStartedAt)) return false;
+  if (!Number.isInteger(signal.lineWrapGuardMinWordIndex)) return false;
+  if (!Number.isInteger(signal.lineWrapGuardMaxWordIndex)) return false;
+  if (timestamp - signal.lineWrapGuardStartedAt > LINE_WRAP_SETTLE_TTL_MS) return false;
+
+  return (
+    wordIndex >= signal.lineWrapGuardMinWordIndex &&
+    wordIndex <= signal.lineWrapGuardMaxWordIndex
   );
 };
 
@@ -286,6 +438,7 @@ const useReadingDualInterventionSession = ({
   contentId,
   apiBaseUrl,
   trackingBaseUrl,
+  pageKey,
   flushIntervalMs = DEFAULT_FLUSH_INTERVAL_MS,
   fluentTimeoutMs = DEFAULT_FLUENT_TIMEOUT_MS,
   onAdaptationState,
@@ -302,6 +455,10 @@ const useReadingDualInterventionSession = ({
   const sessionStartStrategyRef = useRef(0);
   const handshakeVariantRef = useRef(0);
   const pendingAdaptationRef = useRef(null);
+  const pageKeyRef = useRef(String(pageKey ?? ""));
+  const pageChangedAtRef = useRef(0);
+  const hasPointerOnCurrentPageRef = useRef(false);
+  const observedWordIndexesOnPageRef = useRef(new Set());
   const pointStatsRef = useRef({
     withWordIndex: 0,
     withoutWordIndex: 0,
@@ -489,6 +646,37 @@ const useReadingDualInterventionSession = ({
     );
   }, []);
 
+  useLayoutEffect(() => {
+    const nextPageKey = String(pageKey ?? "");
+    if (pageKeyRef.current === nextPageKey) return;
+
+    pageKeyRef.current = nextPageKey;
+    pageChangedAtRef.current = Date.now();
+    hasPointerOnCurrentPageRef.current = false;
+    observedWordIndexesOnPageRef.current = new Set();
+    currentWordIndexRef.current = null;
+    pendingAdaptationRef.current = null;
+    activeInterventionWordIndexRef.current = null;
+    pointBufferRef.current = [];
+    lastPointerRef.current = {
+      x: null,
+      y: null,
+      inside: false,
+    };
+
+    clearFluentTimer();
+    clearDistractionTimer();
+    resetLocalFallbackSignal();
+    setVisualFlags(INITIAL_VISUAL_FLAGS);
+    setWordIntervention(INITIAL_WORD_INTERVENTION);
+    markDebug({
+      bufferedPoints: 0,
+      localFallbackActive: false,
+      localFallbackReason: "",
+      localFallbackWordIndex: null,
+    });
+  }, [clearDistractionTimer, clearFluentTimer, markDebug, pageKey, resetLocalFallbackSignal]);
+
   const armFluentTimer = useCallback(() => {
     clearFluentTimer();
 
@@ -587,7 +775,7 @@ const useReadingDualInterventionSession = ({
 
       if (
         isRegressionState &&
-        isWordInsideLineWrapSettleZone({
+        isWordInsideLineWrapGuard({
           signal,
           wordIndex: resolvedWordIndex,
           timestamp: now,
@@ -716,11 +904,13 @@ const useReadingDualInterventionSession = ({
   );
 
   const evaluateRegressionFallbackByWordIndex = useCallback(
-    ({ wordIndex, timestamp, wordLayout }) => {
+    ({ wordIndex, timestamp, wordElement, wordLayout, pointerX, pointerY, previousPointer }) => {
       if (!Number.isInteger(wordIndex) || wordIndex < 0) return false;
 
       const signal = localFallbackSignalRef.current;
       let isRegressionReady = false;
+      const nextWordLayout = getAdjacentWordLayoutSnapshot(wordElement, wordIndex, 1);
+      const previousWordLayout = getAdjacentWordLayoutSnapshot(wordElement, wordIndex, -1);
 
       if (
         Number.isFinite(signal.lastObservedAt) &&
@@ -728,41 +918,74 @@ const useReadingDualInterventionSession = ({
       ) {
         resetRegressionSignal(signal);
         resetLoopSignal(signal);
-        resetLineWrapSettleSignal(signal);
+        resetLineWrapGuard(signal);
       }
 
       if (
-        Number.isFinite(signal.lineWrapSettleStartedAt) &&
-        timestamp - signal.lineWrapSettleStartedAt > LINE_WRAP_SETTLE_TTL_MS
+        Number.isFinite(signal.lineWrapGuardStartedAt) &&
+        timestamp - signal.lineWrapGuardStartedAt > LINE_WRAP_SETTLE_TTL_MS
       ) {
-        resetLineWrapSettleSignal(signal);
+        resetLineWrapGuard(signal);
+      }
+
+      const isLineEndDescentAnchor =
+        isVisualLineEndWord({ wordLayout, nextWordLayout }) &&
+        isPointerInLineWrapDescentZone({ wordLayout, pointerX, pointerY });
+
+      if (isLineEndDescentAnchor) {
+        armLineWrapGuard({
+          signal,
+          timestamp,
+          anchorWordIndex: wordIndex,
+          lineTop: wordLayout?.top,
+          extraWordIndexes: [wordIndex + 1],
+        });
       }
 
       if (Number.isInteger(signal.lastWordIndex)) {
         const wordDelta = wordIndex - signal.lastWordIndex;
-        const didMoveToLowerVisualLine = isLikelyLineWrapForward({
+        const didMoveToLowerVisualLine = isForwardLowerLineTransition({
+          wordDelta,
           previousTop: signal.lastWordLayoutTop,
           nextTop: wordLayout?.top,
-          previousLeft: signal.lastWordLayoutLeft,
-          nextLeft: wordLayout?.left,
         });
-        const isLineWrapSettleBacktrack =
-          Number.isFinite(signal.lineWrapSettleStartedAt) &&
-          Number.isInteger(signal.lineWrapSettleLandingWordIndex) &&
-          signal.lineWrapSettleLandingWordIndex > wordIndex &&
-          signal.lineWrapSettleLandingWordIndex - wordIndex <=
-            LINE_WRAP_SETTLE_MAX_BACKTRACK_WORDS &&
-          isSameVisualLine(signal.lineWrapSettleLineTop, wordLayout?.top);
+        const isLineWrapDescentBacktrack =
+          wordDelta < 0 &&
+          signal.lastWordIndex - wordIndex <= LINE_WRAP_SETTLE_MAX_BACKTRACK_WORDS &&
+          isLikelyLineWrapDescentBacktrack({
+            previousTop: signal.lastWordLayoutTop,
+            nextLayout: wordLayout,
+            previousPointer,
+            pointerX,
+            pointerY,
+          });
+        const isLineWrapDescentAnchor =
+          wordDelta === 0 &&
+          (isLineEndDescentAnchor ||
+            isLikelyLineWrapDescentAnchor({
+              wordLayout,
+              previousPointer,
+              pointerX,
+              pointerY,
+            }));
+        const isLineWrapGuardedBacktrack =
+          isWordInsideLineWrapGuard({ signal, wordIndex, timestamp }) &&
+          (isSameVisualLine(signal.lineWrapGuardLineTop, wordLayout?.top) ||
+            isSameVisualLine(signal.lineWrapGuardLineTop, previousWordLayout?.top) ||
+            isSameVisualLine(signal.lineWrapGuardLineTop, nextWordLayout?.top));
 
         if (wordDelta <= -LOCAL_FALLBACK_REGRESSION_MIN_STEP_DELTA) {
-          if (isLineWrapSettleBacktrack) {
-            signal.lineWrapSettleLowestWordIndex = Number.isInteger(
-              signal.lineWrapSettleLowestWordIndex,
-            )
-              ? Math.min(signal.lineWrapSettleLowestWordIndex, wordIndex)
-              : wordIndex;
-            resetRegressionSignal(signal);
-            resetLoopSignal(signal);
+          if (isLineWrapGuardedBacktrack || isLineWrapDescentBacktrack) {
+            if (isLineWrapDescentBacktrack) {
+              armLineWrapGuard({
+                signal,
+                timestamp,
+                anchorWordIndex: signal.lastWordIndex,
+                lineTop: wordLayout?.top,
+                extraWordIndexes: [wordIndex],
+              });
+            }
+            clearRegressionDuringLineWrapGuard(signal);
             if (pendingAdaptationRef.current?.payload?.state === ADAPTATION_STATES.REGRESSION) {
               pendingAdaptationRef.current = null;
             }
@@ -883,6 +1106,18 @@ const useReadingDualInterventionSession = ({
               }
             }
           }
+        } else if (isLineWrapDescentAnchor) {
+          armLineWrapGuard({
+            signal,
+            timestamp,
+            anchorWordIndex: wordIndex,
+            lineTop: wordLayout?.top,
+            extraWordIndexes: [wordIndex + 1],
+          });
+          clearRegressionDuringLineWrapGuard(signal);
+          if (pendingAdaptationRef.current?.payload?.state === ADAPTATION_STATES.REGRESSION) {
+            pendingAdaptationRef.current = null;
+          }
         } else if (wordDelta > 0) {
           // --- LOOP tracking: đổi chiều forward ---
           if (signal.loopLastDirection === "backward") {
@@ -902,10 +1137,13 @@ const useReadingDualInterventionSession = ({
             : wordIndex;
 
           if (didMoveToLowerVisualLine) {
-            signal.lineWrapSettleStartedAt = timestamp;
-            signal.lineWrapSettleLandingWordIndex = wordIndex;
-            signal.lineWrapSettleLineTop = wordLayout.top;
-            signal.lineWrapSettleLowestWordIndex = wordIndex;
+            armLineWrapGuard({
+              signal,
+              timestamp,
+              anchorWordIndex: wordIndex,
+              lineTop: wordLayout?.top,
+              extraWordIndexes: [signal.lastWordIndex],
+            });
           }
 
           // Tiến ra ngoài vùng loop → reset loop
@@ -949,31 +1187,58 @@ const useReadingDualInterventionSession = ({
 
       const signal = localFallbackSignalRef.current;
       const hasDwellAnchor = Number.isFinite(signal.dwellX) && Number.isFinite(signal.dwellY);
+      const hasLastDwellPoint =
+        Number.isFinite(signal.dwellLastX) && Number.isFinite(signal.dwellLastY);
       const pointerDistance = hasDwellAnchor
         ? Math.hypot(x - signal.dwellX, y - signal.dwellY)
         : 0;
+      const stepDistance =
+        signal.dwellWordIndex === wordIndex && hasLastDwellPoint
+          ? Math.hypot(x - signal.dwellLastX, y - signal.dwellLastY)
+          : 0;
+      const isIntentionalInWordMotion =
+        signal.dwellWordIndex === wordIndex &&
+        stepDistance >= LOCAL_FALLBACK_DWELL_MOTION_STEP_PX;
+      const nextMotionDistance = isIntentionalInWordMotion
+        ? signal.dwellMotionDistance + stepDistance
+        : signal.dwellMotionDistance;
       const shouldResetDwell =
         signal.dwellWordIndex !== wordIndex ||
         !hasDwellAnchor ||
-        pointerDistance > LOCAL_FALLBACK_DWELL_POINTER_TOLERANCE_PX;
+        pointerDistance > LOCAL_FALLBACK_DWELL_POINTER_TOLERANCE_PX ||
+        nextMotionDistance >= LOCAL_FALLBACK_DWELL_MOTION_RESET_PX;
 
       if (shouldResetDwell) {
-        signal.dwellWordIndex = wordIndex;
-        signal.dwellStartedAt = timestamp;
-        signal.dwellX = x;
-        signal.dwellY = y;
-        signal.dwellReadyAt = null;
+        resetDwellSignal({
+          signal,
+          wordIndex,
+          x,
+          y,
+          timestamp,
+          markMotion: isIntentionalInWordMotion || hasDwellAnchor,
+        });
         if (pendingAdaptationRef.current?.payload?.state === ADAPTATION_STATES.DISTRACTION) {
           pendingAdaptationRef.current = null;
         }
         return false;
       }
 
-      if (!shouldTrigger || !Number.isFinite(signal.dwellStartedAt)) {
+      if (isIntentionalInWordMotion) {
+        signal.dwellLastX = x;
+        signal.dwellLastY = y;
+        signal.dwellMotionDistance = nextMotionDistance;
+        signal.dwellLastMotionAt = timestamp;
+        if (pendingAdaptationRef.current?.payload?.state === ADAPTATION_STATES.DISTRACTION) {
+          pendingAdaptationRef.current = null;
+        }
+      }
+
+      const stationaryStartedAt = resolveDwellStationaryStartedAt(signal);
+      if (!shouldTrigger || !Number.isFinite(stationaryStartedAt)) {
         return false;
       }
 
-      const dwellDurationMs = timestamp - signal.dwellStartedAt;
+      const dwellDurationMs = timestamp - stationaryStartedAt;
       if (dwellDurationMs < LOCAL_FALLBACK_DWELL_MIN_MS) {
         return false;
       }
@@ -981,6 +1246,10 @@ const useReadingDualInterventionSession = ({
       signal.dwellStartedAt = timestamp;
       signal.dwellX = x;
       signal.dwellY = y;
+      signal.dwellLastX = x;
+      signal.dwellLastY = y;
+      signal.dwellMotionDistance = 0;
+      signal.dwellLastMotionAt = null;
       signal.dwellReadyAt = timestamp;
       if (localFallbackAllowedRef.current) {
         triggerLocalFallbackIntervention({
@@ -1000,9 +1269,27 @@ const useReadingDualInterventionSession = ({
 
       const now = Date.now();
       const payloadWordIndex = toIntegerOrNull(payload.wordIndex);
+      const isNonFluentState = payload.state !== ADAPTATION_STATES.FLUENT;
+      const isInsidePageChangeGuard =
+        pageChangedAtRef.current > 0 &&
+        now - pageChangedAtRef.current < PAGE_CHANGE_STALE_EVENT_GUARD_MS;
+      const hasObservedPayloadWordOnPage =
+        Number.isInteger(payloadWordIndex) &&
+        observedWordIndexesOnPageRef.current.has(payloadWordIndex);
+
+      if (
+        isNonFluentState &&
+        pageChangedAtRef.current > 0 &&
+        (!hasPointerOnCurrentPageRef.current ||
+          isInsidePageChangeGuard ||
+          !hasObservedPayloadWordOnPage)
+      ) {
+        return;
+      }
+
       if (
         payload.state === ADAPTATION_STATES.REGRESSION &&
-        isWordInsideLineWrapSettleZone({
+        isWordInsideLineWrapGuard({
           signal: localFallbackSignalRef.current,
           wordIndex: payloadWordIndex,
           timestamp: now,
@@ -1129,9 +1416,10 @@ const useReadingDualInterventionSession = ({
         payloadWordIndex === null ||
         payloadWordIndex === signal.dwellWordIndex ||
         payloadWordIndex === currentWordIndex;
+      const stationaryStartedAt = resolveDwellStationaryStartedAt(signal);
       const dwellDurationReady =
-        Number.isFinite(signal.dwellStartedAt) &&
-        timestamp - signal.dwellStartedAt >= LOCAL_FALLBACK_DWELL_MIN_MS;
+        Number.isFinite(stationaryStartedAt) &&
+        timestamp - stationaryStartedAt >= LOCAL_FALLBACK_DWELL_MIN_MS;
       const dwellRecentlyReady =
         Number.isFinite(signal.dwellReadyAt) &&
         timestamp - signal.dwellReadyAt <= LOCAL_FALLBACK_BEHAVIOR_READY_TTL_MS;
@@ -1163,13 +1451,23 @@ const useReadingDualInterventionSession = ({
   );
 
   const shouldDelayAdaptationPayload = useCallback(
-    () => {
-      // Backend rolling-window classifications are the source of truth. Local
-      // readiness only powers local fallback, not backend adaptation gating.
-      pendingAdaptationRef.current = null;
-      return false;
+    (payload, timestamp = Date.now()) => {
+      if (payload?.state !== ADAPTATION_STATES.DISTRACTION) {
+        pendingAdaptationRef.current = null;
+        return false;
+      }
+
+      if (isAdaptationBehaviorReady(payload, timestamp)) {
+        return false;
+      }
+
+      pendingAdaptationRef.current = {
+        payload,
+        receivedAt: timestamp,
+      };
+      return true;
     },
-    [],
+    [isAdaptationBehaviorReady],
   );
 
   const handleSocketMessage = useCallback(
@@ -1614,6 +1912,8 @@ const useReadingDualInterventionSession = ({
     if (!enabled) return;
     if (event?.pointerType && event.pointerType !== "mouse") return;
 
+    hasPointerOnCurrentPageRef.current = true;
+
     let resolvedWordIndex = currentWordIndexRef.current;
     const wordElement = event.target?.closest?.("[data-word-index]");
     const wordLayout = getWordLayoutSnapshot(wordElement);
@@ -1622,9 +1922,11 @@ const useReadingDualInterventionSession = ({
       if (parsed !== null && parsed >= 0) {
         currentWordIndexRef.current = parsed;
         resolvedWordIndex = parsed;
+        observedWordIndexesOnPageRef.current.add(parsed);
       }
     }
 
+    const previousPointer = lastPointerRef.current;
     lastPointerRef.current = {
       x: event.clientX,
       y: event.clientY,
@@ -1636,7 +1938,11 @@ const useReadingDualInterventionSession = ({
     evaluateRegressionFallbackByWordIndex({
       wordIndex: resolvedWordIndex,
       timestamp,
+      wordElement,
       wordLayout,
+      pointerX: event.clientX,
+      pointerY: event.clientY,
+      previousPointer,
     });
 
     evaluateDwellFallbackByPointer({
@@ -1690,10 +1996,11 @@ const useReadingDualInterventionSession = ({
   }, [resetLocalFallbackSignal]);
 
   const handleTooltipRendered = useCallback(() => {}, []);
+  const isRenderingStalePageState = pageKeyRef.current !== String(pageKey ?? "");
 
   return {
-    visualFlags,
-    wordIntervention,
+    visualFlags: isRenderingStalePageState ? INITIAL_VISUAL_FLAGS : visualFlags,
+    wordIntervention: isRenderingStalePageState ? INITIAL_WORD_INTERVENTION : wordIntervention,
     activeTooltip: null,
     trackingDebug,
     handleStoryPointerMove,

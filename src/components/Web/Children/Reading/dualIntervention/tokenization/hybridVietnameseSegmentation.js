@@ -5,8 +5,55 @@ const toStringSafe = (value) => String(value ?? "");
 
 const normalizeParagraphBreaks = (value) => toStringSafe(value).replace(/\r\n?/g, "\n");
 
+const trimHorizontalWhitespaceEnd = (value) => value.replace(/[ \t\f\v]+$/g, "");
+
+const normalizeQuoteInnerSpacing = (value) => {
+  let normalized = "";
+  let isInsideStraightDoubleQuote = false;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+
+    if (char === "\"") {
+      if (isInsideStraightDoubleQuote) {
+        normalized = trimHorizontalWhitespaceEnd(normalized);
+        normalized += char;
+        isInsideStraightDoubleQuote = false;
+        continue;
+      }
+
+      normalized += char;
+      isInsideStraightDoubleQuote = true;
+
+      while (/[ \t\f\v]/.test(value[index + 1] || "")) {
+        index += 1;
+      }
+      continue;
+    }
+
+    if (char === "“" || char === "‘") {
+      normalized += char;
+
+      while (/[ \t\f\v]/.test(value[index + 1] || "")) {
+        index += 1;
+      }
+      continue;
+    }
+
+    if (char === "”" || char === "’") {
+      normalized = trimHorizontalWhitespaceEnd(normalized);
+      normalized += char;
+      continue;
+    }
+
+    normalized += char;
+  }
+
+  return normalized;
+};
+
 const normalizeSegmentedPunctuationSpacing = (value) =>
-  normalizeParagraphBreaks(value)
+  normalizeQuoteInnerSpacing(normalizeParagraphBreaks(value))
     .replace(/[ \t\f\v]+([,.;!?…:])/g, "$1")
     .replace(/([,.;!?…:])(?=[\p{L}_])/gu, "$1 ");
 

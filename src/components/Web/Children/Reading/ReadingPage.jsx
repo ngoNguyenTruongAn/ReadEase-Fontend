@@ -289,7 +289,7 @@ const ReadingPage = () => {
   });
 
   const [isLoading, setIsLoading] = useState(true);
-  const [story, setStory] = useState(STORY_FALLBACK);
+  const [story, setStory] = useState(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [isBionicEnabled, setIsBionicEnabled] = useState(false);
   const [isHoverSpeechEnabled, setIsHoverSpeechEnabled] = useState(false);
@@ -480,12 +480,7 @@ const ReadingPage = () => {
     };
 
     const fetchReadingData = async () => {
-      if (selectedStory) {
-        setStory(normalizeStoryPayload(null, selectedStory));
-      } else {
-        setStory(STORY_FALLBACK);
-      }
-
+      setStory(null);
       setContentAvailability({ ...CONTENT_AVAILABILITY_DEFAULT });
       setIsLoading(true);
 
@@ -600,7 +595,7 @@ const ReadingPage = () => {
 
   useEffect(() => {
     setCurrentPage(0);
-  }, [story.title]);
+  }, [story?.title]);
 
   useEffect(() => {
     // Reset session tracking when the story changes.
@@ -611,7 +606,7 @@ const ReadingPage = () => {
     setHasReachedStoryEndCursor(false);
     sessionMetricsRef.current = createInitialReadingSessionMetrics();
     finishInFlightRef.current = false;
-  }, [story.title]);
+  }, [story?.title]);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -656,6 +651,10 @@ const ReadingPage = () => {
   const safeCurrentPage = Math.min(currentPage, totalPages - 1);
   const pageText = renderedStoryPages.pages[safeCurrentPage] ?? "";
   const pageSegmentedText = renderedStoryPages.segmentedPages?.[safeCurrentPage] ?? pageText;
+  const readingPageKey = useMemo(
+    () => `${safeCurrentPage}:${pageSegmentedText}`,
+    [pageSegmentedText, safeCurrentPage],
+  );
 
   const pageWordCounts = useMemo(() => {
     const pages = Array.isArray(renderedStoryPages?.segmentedPages)
@@ -690,6 +689,13 @@ const ReadingPage = () => {
   const lastPageIndex = Math.max(totalPages - 1, 0);
   const lastPageLastWordIndex = pageLastWordIndexByPage[lastPageIndex] ?? -1;
   const requiresCursorCompletion = !isContentUnavailable && lastPageLastWordIndex >= 0;
+  const isReadingContentReady =
+    authStatus === "authenticated" &&
+    !isLoading &&
+    !isContentUnavailable &&
+    Boolean(story) &&
+    Boolean(pageText);
+  const isReadingContentPending = authStatus === "checking" || isLoading;
 
   const {
     visualFlags,
@@ -699,11 +705,11 @@ const ReadingPage = () => {
     handleStoryPointerLeave,
     endSession,
   } = useReadingDualInterventionSession({
-    enabled:
-      authStatus === "authenticated" && !isLoading && !isContentUnavailable && Boolean(pageText),
+    enabled: isReadingContentReady,
     contentId:
       story?.contentId ?? selectedStory?.id ?? selectedStory?._id ?? selectedStory?.storyId,
     apiBaseUrl: instance?.defaults?.baseURL,
+    pageKey: readingPageKey,
     onAdaptationState: useCallback(
       (event) => {
         if (!event) return;
@@ -743,8 +749,7 @@ const ReadingPage = () => {
     ),
   });
 
-  const isSessionActive =
-    authStatus === "authenticated" && !isLoading && !isContentUnavailable && Boolean(pageText);
+  const isSessionActive = isReadingContentReady;
 
   useEffect(() => {
     if (!isSessionActive) return;
@@ -1058,27 +1063,24 @@ const ReadingPage = () => {
   return (
     <div className="reading-page-shell">
       <div className="reading-page">
-        <header className="reading-header">
-          <div className="reading-header-row">
-            <h1 className="reading-title">{story.title}</h1>
+        {isReadingContentReady && (
+          <header className="reading-header reading-content-reveal">
+            <div className="reading-header-row">
+              <h1 className="reading-title">{story?.title}</h1>
 
-            <button
-              type="button"
-              className="reading-exit-btn"
-              onClick={handleExitSession}
-              disabled={!canExitSession || isFinishingSession}
-              title={
-                !canExitSession && !isFinishingSession ? exitBlockedMessage : "Hoàn thành phiên đọc"
-              }
-            >
-              {isFinishingSession ? "Đang lưu..." : "Hoàn thành"}
-            </button>
-          </div>
-        </header>
-
-        {isLoading && <p className="reading-loading">Đang tải nội dung truyện...</p>}
-        {!isLoading && authStatus !== "authenticated" && (
-          <p className="reading-loading">Đang xác thực phiên đăng nhập...</p>
+              <button
+                type="button"
+                className="reading-exit-btn"
+                onClick={handleExitSession}
+                disabled={!canExitSession || isFinishingSession}
+                title={
+                  !canExitSession && !isFinishingSession ? exitBlockedMessage : "Hoàn thành phiên đọc"
+                }
+              >
+                {isFinishingSession ? "Đang lưu..." : "Hoàn thành"}
+              </button>
+            </div>
+          </header>
         )}
 
         {isContentUnavailable ? (
@@ -1093,9 +1095,17 @@ const ReadingPage = () => {
               </p>
             )}
           </section>
-        ) : (
+        ) : isReadingContentPending || isReadingContentReady ? (
           <>
-            <div className="reading-body">
+            <div
+              className={[
+                "reading-body",
+                isReadingContentPending ? "reading-body--loading" : "",
+                isReadingContentReady ? "reading-body--ready" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            >
               <ReadingAssistControls
                 isBionicEnabled={isBionicEnabled}
                 isHoverSpeechEnabled={isHoverSpeechEnabled}
@@ -1106,32 +1116,47 @@ const ReadingPage = () => {
                 }}
               />
 
-              <ReadingBookView
-                pageText={pageText}
-                pageSegmentedText={pageSegmentedText}
-                useBionic={isBionicEnabled}
-                isHoverSpeechEnabled={isHoverSpeechEnabled}
-                visualFlags={visualFlags}
-                wordIntervention={wordIntervention}
-                onWordHoverStart={handleHoverSpeechStart}
-                onWordHoverEnd={handleHoverSpeechEnd}
-                onStoryPointerMove={handleReadingPointerMove}
-                onStoryPointerLeave={handleStoryPointerLeave}
-              />
+              {isReadingContentReady ? (
+                <div className="reading-content-reveal reading-book-stage">
+                  <ReadingBookView
+                    key={readingPageKey}
+                    pageText={pageText}
+                    pageSegmentedText={pageSegmentedText}
+                    useBionic={isBionicEnabled}
+                    isHoverSpeechEnabled={isHoverSpeechEnabled}
+                    visualFlags={visualFlags}
+                    wordIntervention={wordIntervention}
+                    onWordHoverStart={handleHoverSpeechStart}
+                    onWordHoverEnd={handleHoverSpeechEnd}
+                    onStoryPointerMove={handleReadingPointerMove}
+                    onStoryPointerLeave={handleStoryPointerLeave}
+                  />
+                </div>
+              ) : (
+                <section className="reading-loading-panel" role="status" aria-live="polite" aria-busy="true">
+                  <span className="reading-loading-spinner" aria-hidden="true" />
+                  <p className="reading-loading-title">Chờ chút nhé!</p>
+                  <p className="reading-loading-copy">Truyện của bé đang được tải.</p>
+                </section>
+              )}
 
               <ReadingScorePanel avatarUrl={avatarUrl} score={score} />
             </div>
 
-            <ReadingPagination
-              currentPage={safeCurrentPage}
-              totalPages={totalPages}
-              onPrevPage={() => setCurrentPage((prev) => Math.max(prev - 1, 0))}
-              onNextPage={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages - 1))}
-              canGoNextOverride={canGoNextPage}
-              nextDisabledTitle={nextPageBlockedMessage}
-            />
+            {isReadingContentReady && (
+              <div className="reading-content-reveal reading-pagination-stage">
+                <ReadingPagination
+                  currentPage={safeCurrentPage}
+                  totalPages={totalPages}
+                  onPrevPage={() => setCurrentPage((prev) => Math.max(prev - 1, 0))}
+                  onNextPage={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages - 1))}
+                  canGoNextOverride={canGoNextPage}
+                  nextDisabledTitle={nextPageBlockedMessage}
+                />
+              </div>
+            )}
           </>
-        )}
+        ) : null}
 
         {shouldShowDebugPanel && (
           <aside className={`reading-tracking-debug ${isDebugPanelExpanded ? "is-expanded" : ""}`}>

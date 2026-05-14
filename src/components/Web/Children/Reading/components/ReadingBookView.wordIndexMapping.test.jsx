@@ -26,10 +26,66 @@ describe("ReadingBookView word index mapping", () => {
     const wordNodes = Array.from(container.querySelectorAll(".reading-word[data-word-index]"));
     expect(wordNodes).toHaveLength(3);
     expect(wordNodes.map((node) => node.getAttribute("data-word-index"))).toEqual(["0", "1", "2"]);
+    expect(wordNodes[0]).toHaveClass("reading-word--atomic");
+    expect(wordNodes[0]).toHaveAttribute("data-wrap-mode", "atomic");
     expect(wordNodes.map((node) => node.getAttribute("data-raw-token"))).toEqual([
       "con_bò",
       "ăn",
       "cỏ",
+    ]);
+  });
+
+  it("uses wrapping fallback only for unusually long word tokens", () => {
+    const longToken = "supercalifragilisticexpialidociousx";
+
+    const { container } = render(
+      <ReadingBookView
+        pageText={longToken}
+        pageSegmentedText={longToken}
+        useBionic={false}
+        isHoverSpeechEnabled={false}
+        visualFlags={null}
+        wordIntervention={null}
+        activeTooltip={null}
+        onWordHoverStart={() => {}}
+        onWordHoverEnd={() => {}}
+        onStoryPointerMove={() => {}}
+        onTooltipRendered={() => {}}
+      />,
+    );
+
+    const wordNode = container.querySelector(".reading-word[data-word-index='0']");
+    expect(wordNode).toBeInTheDocument();
+    expect(wordNode).toHaveClass("reading-word--wrap-fallback");
+    expect(wordNode).toHaveAttribute("data-wrap-mode", "fallback");
+  });
+
+  it("renders quoted text without extra spaces inside quote marks", () => {
+    const { container } = render(
+      <ReadingBookView
+        pageText={'" Con vao rung " . Anh noi'}
+        pageSegmentedText={'" Con vao rung " . Anh noi'}
+        useBionic={false}
+        isHoverSpeechEnabled={false}
+        visualFlags={null}
+        wordIntervention={null}
+        activeTooltip={null}
+        onWordHoverStart={() => {}}
+        onWordHoverEnd={() => {}}
+        onStoryPointerMove={() => {}}
+        onTooltipRendered={() => {}}
+      />,
+    );
+
+    expect(container.querySelector(".reading-book-view")).toHaveTextContent('"Con vao rung". Anh noi');
+
+    const wordNodes = Array.from(container.querySelectorAll(".reading-word[data-word-index]"));
+    expect(wordNodes.map((node) => node.getAttribute("data-word-index"))).toEqual([
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
     ]);
   });
 

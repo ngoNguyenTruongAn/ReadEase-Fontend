@@ -12,6 +12,7 @@ const INTERVENTION_WORD_INDEX_KEYS = [
 ];
 
 const LINE_DETECTION_TOLERANCE_PX = 14;
+const LONG_WORD_WRAP_FALLBACK_GRAPHEME_LIMIT = 32;
 
 // Khởi tạo 1 lần ở module scope để tránh chi phí new Intl.Segmenter() mỗi lần render.
 // Fallback về spread [...str] nếu môi trường không hỗ trợ Intl.Segmenter —
@@ -28,6 +29,10 @@ const getGraphemes = (str) => {
   }
   return [...str];
 };
+
+const shouldUseLongWordWrapFallback = (tokenText) =>
+  getGraphemes(String(tokenText ?? "").normalize("NFC")).length >
+  LONG_WORD_WRAP_FALLBACK_GRAPHEME_LIMIT;
 
 // Áp dụng bionic cho 1 âm tiết đơn (không chứa space).
 // Normalize NFC bắt buộc vì pipeline segmentation không normalize —
@@ -479,6 +484,8 @@ const ReadingBookView = ({
     const isInterventionTargetWord = interventionWordIndexSet.has(wordIndex);
 
     const hoverText = hoverTextByWordIndex.get(wordIndex) || token.displayText || token.value;
+    const wordText = token.displayText || token.value;
+    const shouldAllowWordWrapFallback = shouldUseLongWordWrapFallback(wordText);
 
     const isRegressionStrongRange = regressionRangeIndexSet?.has(wordIndex) ?? false;
     const isRegressionLoopFocus =
@@ -490,6 +497,7 @@ const ReadingBookView = ({
 
     const wordClassName = [
       "reading-word",
+      shouldAllowWordWrapFallback ? "reading-word--wrap-fallback" : "reading-word--atomic",
       isInterventionTargetWord || isRegressionInterventionWord ? "intervention-target-word" : "",
       isBandingLine ? "color-banding-active" : "",
       isBandingStart ? "line-banding-start" : "",
@@ -521,12 +529,13 @@ const ReadingBookView = ({
         data-word-index={wordIndex}
         data-raw-token={token.rawToken || token.value}
         data-reading-hover-text={hoverText}
+        data-wrap-mode={shouldAllowWordWrapFallback ? "fallback" : "atomic"}
         onMouseEnter={(event) => {
           triggerHoverSpeechFromWordNode(event.currentTarget);
         }}
       >
         {renderWordPiece({
-          token: token.displayText || token.value,
+          token: wordText,
           useBionic,
         })}
       </span>
