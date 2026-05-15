@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import "./ChildrenLayout.scss";
 import redMonster from "../../../assets/image/reading book and sitting on the grass 1.png";
@@ -137,6 +137,21 @@ const pickChildId = (root) =>
       root?.child?._id,
   );
 
+const pickAvatarInfo = (root) => ({
+  rewardId: textOrEmpty(
+    root?.avatar_reward_id ||
+      root?.avatarRewardId ||
+      root?.current_avatar_reward_id ||
+      root?.currentAvatarRewardId,
+  ),
+  url: textOrEmpty(
+    root?.avatar_url || root?.avatarUrl || root?.avatar?.image_url,
+  ),
+  name: textOrEmpty(
+    root?.avatar_name || root?.avatarName || root?.avatar?.name,
+  ),
+});
+
 const ChildrenLayout = () => {
   const defaultSideStory = useMemo(
     () => ({ kind: "default", src: redMonster, alt: "ReadEase" }),
@@ -175,6 +190,29 @@ const ChildrenLayout = () => {
   const showStoreSidebar = isStoreRoute;
   const [balance, setBalance] = useState(0);
   const [childId, setChildId] = useState("");
+  const [, setStoreFilterOpen] = useState(false);
+  const [avatar, setAvatar] = useState({ rewardId: "", url: "", name: "" });
+  const avatarSrc = avatar.url || redMonster;
+  const resetSideStory = useCallback(() => {
+    setSideStory(defaultSideStory);
+  }, [defaultSideStory]);
+  const outletContext = useMemo(
+    () => ({
+      setSideStory,
+      resetSideStory,
+      balance,
+      setBalance,
+      childId,
+      avatar,
+      setAvatar,
+    }),
+    [resetSideStory, balance, childId, avatar],
+  );
+
+  const handleAvatarError = (event) => {
+    event.currentTarget.onerror = null;
+    event.currentTarget.src = redMonster;
+  };
 
   useEffect(() => {
     // Đồng bộ childId từ profile (profile trả field id)
@@ -185,6 +223,7 @@ const ChildrenLayout = () => {
         const root = payload?.data ?? payload?.user ?? payload ?? {};
         const id = pickChildId(root);
         if (cancelled) return;
+        setAvatar(pickAvatarInfo(root));
         if (!id) {
           setChildId("");
           localStorage.removeItem("childId");
@@ -195,6 +234,7 @@ const ChildrenLayout = () => {
       } catch {
         if (!cancelled) {
           setChildId("");
+          setAvatar({ rewardId: "", url: "", name: "" });
           localStorage.removeItem("childId");
         }
       }
@@ -398,6 +438,7 @@ const ChildrenLayout = () => {
       try {
         const data = await AuthAPI.getProfileAPI();
         const root = data?.data ?? data?.user ?? data;
+        setAvatar(pickAvatarInfo(root));
         const fullName =
           root?.display_name ??
           root?.fullName ??
@@ -516,7 +557,9 @@ const ChildrenLayout = () => {
                     />
                   </div>
 
-                  <h3 className="children-side-story-title">{sideStory.title}</h3>
+                  <h3 className="children-side-story-title">
+                    {sideStory.title}
+                  </h3>
 
                   <div className="children-side-story-tags">
                     <span className="children-side-story-tag">
@@ -561,9 +604,10 @@ const ChildrenLayout = () => {
                   <div className="children-side-profile">
                     <div className="children-side-illustration children-side-illustration--profile">
                       <img
-                        src={defaultSideStory.src}
-                        alt={defaultSideStory.alt}
+                        src={avatarSrc}
+                        alt={avatar.name || defaultSideStory.alt}
                         className="children-side-illustration-img children-side-illustration-img--profile"
+                        onError={handleAvatarError}
                       />
                     </div>
                     <div className="children-side-profile-header">
@@ -908,9 +952,10 @@ const ChildrenLayout = () => {
             <div className="children-navbar-left">
               <div className="children-avatar">
                 <img
-                  src={redMonster}
-                  alt="Red Monster Reading Book"
+                  src={avatarSrc}
+                  alt={avatar.name || "Red Monster Reading Book"}
                   className="children-avatar-img"
+                  onError={handleAvatarError}
                 />
               </div>
             </div>
@@ -971,13 +1016,8 @@ const ChildrenLayout = () => {
 
           <section className="children-content">
             <Outlet
-              context={{
-                setSideStory,
-                resetSideStory: () => setSideStory(defaultSideStory),
-                balance,
-                setBalance,
-                childId,
-              }}
+              key={location.pathname}
+              context={outletContext}
             />
           </section>
         </main>

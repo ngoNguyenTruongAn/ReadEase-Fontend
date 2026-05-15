@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
+import { toast } from "react-toastify";
 import AuthAPI from "../../../service/Auth/AuthAPI";
 import ChildrenAPI from "../../../service/Children/ChildrenAPI";
 import "./ProfileLayout.scss";
@@ -21,16 +22,29 @@ const pickProfile = (data) => {
       data?.id,
     email: root?.email ?? data?.email,
     role: root?.role ?? root?.roles?.[0] ?? data?.role,
+    avatarRewardId:
+      root?.avatar_reward_id ??
+      root?.avatarRewardId ??
+      root?.current_avatar_reward_id ??
+      root?.currentAvatarRewardId ??
+      "",
+    avatarUrl: root?.avatar_url ?? root?.avatarUrl ?? "",
+    avatarName: root?.avatar_name ?? root?.avatarName ?? "",
   };
 };
 
 const ProfileLayout = () => {
   const navigate = useNavigate();
+  const outletContext = useOutletContext();
+  const setLayoutAvatar = outletContext?.setAvatar;
+  const layoutAvatarRewardId = outletContext?.avatar?.rewardId ?? "";
 
   const [_profile, setProfile] = useState(null);
   const [collection, setCollection] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [currentAvatarRewardId, setCurrentAvatarRewardId] = useState("");
+  const [settingAvatarId, setSettingAvatarId] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -47,6 +61,9 @@ const ProfileLayout = () => {
         const parsedProfile = pickProfile(profileData);
 
         setProfile(parsedProfile);
+        setCurrentAvatarRewardId(
+          String(parsedProfile.avatarRewardId || "").trim(),
+        );
 
         const childId = String(parsedProfile?.id || "").trim();
 
@@ -63,7 +80,7 @@ const ProfileLayout = () => {
 
         const items = collectionRes?.data?.items ?? [];
 
-        setCollection(items.slice(0, 6));
+        setCollection(items);
       } catch (err) {
         if (!cancelled) {
           const body = err?.response?.data;
@@ -88,6 +105,42 @@ const ProfileLayout = () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const normalized = String(layoutAvatarRewardId || "").trim();
+    if (normalized) setCurrentAvatarRewardId(normalized);
+  }, [layoutAvatarRewardId]);
+
+  const handleSetAvatar = async (item) => {
+    const rewardId = String(item?.reward_id || "").trim();
+    if (!rewardId || settingAvatarId || rewardId === currentAvatarRewardId)
+      return;
+
+    setSettingAvatarId(rewardId);
+    try {
+      const response = await ChildrenAPI.setAvatar(rewardId);
+      const avatar = response?.data ?? response ?? {};
+      const nextAvatar = {
+        rewardId: avatar.avatar_reward_id || rewardId,
+        url: avatar.avatar_url || item.image_url || "",
+        name: avatar.avatar_name || item.name || "",
+      };
+
+      setCurrentAvatarRewardId(nextAvatar.rewardId);
+      setLayoutAvatar?.(nextAvatar);
+      toast.success("Đã đặt avatar mới.");
+    } catch (err) {
+      const body = err?.response?.data;
+      const message =
+        body?.message ||
+        body?.error?.message ||
+        err?.message ||
+        "Không thể đặt avatar.";
+      toast.error(message);
+    } finally {
+      setSettingAvatarId("");
+    }
+  };
 
   if (loading) {
     return <div className="profile-loading">Đang tải bộ sưu tập...</div>;
@@ -146,7 +199,9 @@ const ProfileLayout = () => {
               return (
                 <article
                   key={item.reward_id}
-                  className={`profile-collection-card profile-collection-card--${tint}`}
+                  className={`profile-collection-card profile-collection-card--${tint} ${
+                    currentAvatarRewardId === item.reward_id ? "is-avatar" : ""
+                  }`}
                 >
                   {item.quantity > 1 && (
                     <span className="profile-badge">x{item.quantity}</span>
@@ -162,6 +217,22 @@ const ProfileLayout = () => {
                   </div>
 
                   <span className="profile-card-name">{item.name}</span>
+
+                  <button
+                    type="button"
+                    className="profile-avatar-btn"
+                    disabled={
+                      settingAvatarId === item.reward_id ||
+                      currentAvatarRewardId === item.reward_id
+                    }
+                    onClick={() => handleSetAvatar(item)}
+                  >
+                    {currentAvatarRewardId === item.reward_id
+                      ? "Đang dùng"
+                      : settingAvatarId === item.reward_id
+                        ? "Đang đặt..."
+                        : "Đặt làm avatar"}
+                  </button>
                 </article>
               );
             })}

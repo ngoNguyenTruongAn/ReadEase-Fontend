@@ -69,6 +69,16 @@ const getCollection = async (childId) => {
   }
 };
 
+const setAvatar = async (rewardId) => {
+  try {
+    const response = await instance.patch("children/me/avatar", { rewardId });
+    return response.data;
+  } catch (error) {
+    console.error("Error setting avatar:", error);
+    throw error;
+  }
+};
+
 const getGuardians = async () => {
   try {
     const response = await instance.get("guardian/my-guardians");
@@ -86,5 +96,6 @@ export default {
   redeemReward,
   getInviteCode,
   getCollection,
+  setAvatar,
   getGuardians,
 };
