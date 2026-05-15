@@ -511,6 +511,9 @@ $children-side-viewport-gap: 52px;
   height: 40px;
   border-radius: 999px;
   background: rgba($primary-color, 0.2);
+  display: block;
+  object-fit: contain;
+  object-position: center;
 }
 
 .children-avatar {
