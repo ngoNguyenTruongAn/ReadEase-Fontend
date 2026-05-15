@@ -24,6 +24,7 @@ import Patients from "./components/Web/Clinician/Patients/Patients";
 import Reports from "./components/Web/Clinician/Reports/Reports";
 import ClinicianProfile from "./components/Web/Clinician/Profile/ClinicianProfile";
 import Content from "./components/Web/Clinician/Content/Content";
+import Rewards from "./components/Web/Clinician/Rewards/Rewards";
 function App() {
   return (
     <>
@@ -75,6 +76,7 @@ function App() {
           <Route path="/clinician/patients" element={<Patients />} />
           <Route path="/clinician/reports" element={<Reports />} />
           <Route path="/clinician/profile" element={<ClinicianProfile />} />
+          <Route path="/clinician/rewards" element={<Rewards />} />
         </Route>
       </Routes>
 
