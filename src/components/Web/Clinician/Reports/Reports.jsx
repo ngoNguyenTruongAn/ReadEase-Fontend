@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "react-toastify";
+import ClinicianAPI from "../../../../service/Clinician/ClinicianAPI";
 import GuardianAPI from "../../../../service/Guardian/GuardianAPI";
 import { humanizeApiError } from "../../../../service/instance";
 import "./Reports.scss";
@@ -28,7 +29,24 @@ const normalizeReportDetail = (res) => {
   return null;
 };
 
-const reportRowId = (row) => row?.id ?? row?.report_id ?? row?._id;
+const reportRowId = (row) => {
+  if (!row || typeof row !== "object") return "";
+  const nested = row.report ?? row.data ?? row.payload;
+  return (
+    row.id ??
+    row.report_id ??
+    row.reportId ??
+    row._id ??
+    row.uuid ??
+    (nested && typeof nested === "object" ? reportRowId(nested) : "") ??
+    ""
+  );
+};
+
+const resolveActiveReportId = (detail, detailReportId) => {
+  const id = detailReportId || reportRowId(detail);
+  return id != null && String(id).trim() ? String(id).trim() : "";
+};
 
 const isApprovedReport = (row) => {
   if (!row) return false;
@@ -77,6 +95,53 @@ const formatDateTime = (input) => {
   return `${datePart} ${timePart}`;
 };
 
+const COMMENT_HEADING_RE = /^#{1,3}\s*(Nhận xét|Ghi chú)\s*$/i;
+
+const splitReportContent = (content) => {
+  const text = String(content ?? "");
+  const lines = text.split("\n");
+  let splitIdx = -1;
+  let headingLine = "";
+
+  for (let i = 0; i < lines.length; i += 1) {
+    if (COMMENT_HEADING_RE.test(lines[i].trim())) {
+      splitIdx = i;
+      headingLine = lines[i].trim();
+      break;
+    }
+  }
+
+  if (splitIdx === -1) {
+    return {
+      main: "",
+      commentHeading: "",
+      commentBody: text.trim(),
+      hasSplit: false,
+    };
+  }
+
+  return {
+    main: lines.slice(0, splitIdx).join("\n").trim(),
+    commentHeading: headingLine,
+    commentBody: lines
+      .slice(splitIdx + 1)
+      .join("\n")
+      .trim(),
+    hasSplit: true,
+  };
+};
+
+const mergeReportContent = (parts) => {
+  const body = String(parts.commentBody ?? "").trim();
+  if (!parts.hasSplit) return body;
+
+  const chunks = [];
+  if (parts.main) chunks.push(parts.main);
+  if (parts.commentHeading) chunks.push(parts.commentHeading);
+  if (body) chunks.push(body);
+  return chunks.join("\n\n");
+};
+
 const Reports = () => {
   const [children, setChildren] = useState([]);
   const [loadingChildren, setLoadingChildren] = useState(true);
@@ -95,6 +160,12 @@ const Reports = () => {
   const [detail, setDetail] = useState(null);
   const [detailReportId, setDetailReportId] = useState("");
   const [approvingReportId, setApprovingReportId] = useState("");
+  const [contentEditing, setContentEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState("");
+  const [commentParts, setCommentParts] = useState(() =>
+    splitReportContent(""),
+  );
+  const [savingContent, setSavingContent] = useState(false);
 
   const fetchChildren = useCallback(async () => {
     setLoadingChildren(true);
@@ -104,7 +175,8 @@ const Reports = () => {
       const list = normalizeChildren(res);
       setChildren(list);
       setSelectedChildId((prev) => {
-        if (prev && list.some((c) => String(c.id) === String(prev))) return prev;
+        if (prev && list.some((c) => String(c.id) === String(prev)))
+          return prev;
         return list[0]?.id != null ? String(list[0].id) : "";
       });
     } catch (err) {
@@ -165,19 +237,29 @@ const Reports = () => {
     }
   };
 
+  const resetContentEdit = () => {
+    setContentEditing(false);
+    setEditDraft("");
+    setCommentParts(splitReportContent(""));
+    setSavingContent(false);
+  };
+
   const openDetail = async (reportId) => {
-    if (!reportId) return;
+    const id = reportId != null ? String(reportId).trim() : "";
+    if (!id) return;
     setDetailOpen(true);
     setDetailLoading(true);
     setDetail(null);
-    setDetailReportId(String(reportId));
+    resetContentEdit();
+    setDetailReportId(id);
     try {
-      const res = await GuardianAPI.getReportById(reportId);
-      setDetail(normalizeReportDetail(res));
+      const res = await GuardianAPI.getReportById(id);
+      const normalized = normalizeReportDetail(res);
+      setDetail(normalized);
+      const resolvedId = resolveActiveReportId(normalized, id);
+      if (resolvedId) setDetailReportId(resolvedId);
     } catch (err) {
-      toast.error(
-        humanizeApiError(err, "Không tải được chi tiết báo cáo."),
-      );
+      toast.error(humanizeApiError(err, "Không tải được chi tiết báo cáo."));
       setDetailOpen(false);
       setDetailReportId("");
     } finally {
@@ -189,6 +271,74 @@ const Reports = () => {
     setDetailOpen(false);
     setDetail(null);
     setDetailReportId("");
+    resetContentEdit();
+  };
+
+  const startContentEdit = () => {
+    const parts = splitReportContent(detail?.content ?? "");
+    setCommentParts(parts);
+    setEditDraft(parts.commentBody);
+    setContentEditing(true);
+  };
+
+  const cancelContentEdit = () => {
+    setContentEditing(false);
+    setEditDraft("");
+  };
+
+  const persistReportContent = (reportId, content, apiPayload = null) => {
+    const normalized = apiPayload ? normalizeReportDetail(apiPayload) : null;
+    const nextContent =
+      normalized?.content != null ? String(normalized.content) : content;
+
+    setDetail((prev) =>
+      prev
+        ? {
+            ...prev,
+            ...normalized,
+            content: nextContent,
+          }
+        : prev,
+    );
+    setReports((prev) =>
+      prev.map((r) =>
+        String(reportRowId(r)) === String(reportId)
+          ? { ...r, content: nextContent }
+          : r,
+      ),
+    );
+  };
+
+  const handleSaveContent = async () => {
+    const reportId = resolveActiveReportId(detail, detailReportId);
+    if (!reportId) {
+      toast.error("Không xác định được mã báo cáo. Hãy đóng và mở lại chi tiết.");
+      return;
+    }
+    if (savingContent) return;
+
+    const content = mergeReportContent({
+      ...commentParts,
+      commentBody: editDraft,
+    }).trim();
+    if (!content) {
+      toast.error("Nhận xét không được để trống.");
+      return;
+    }
+
+    setSavingContent(true);
+    try {
+      const res = await ClinicianAPI.updateReportContent(reportId, content);
+      persistReportContent(reportId, content, res);
+      setContentEditing(false);
+      setEditDraft("");
+      setCommentParts(splitReportContent(content));
+      toast.success("Đã lưu nhận xét.");
+    } catch (err) {
+      toast.error(humanizeApiError(err, "Lưu nhận xét thất bại."));
+    } finally {
+      setSavingContent(false);
+    }
   };
 
   const detailIsApproved = useMemo(() => {
@@ -201,10 +351,27 @@ const Reports = () => {
   const detailIsApproving =
     approvingReportId && String(approvingReportId) === String(detailReportId);
 
-  const detailBodyText = useMemo(() => {
-    const raw = detail?.content;
-    return typeof raw === "string" && raw.trim() ? raw : null;
-  }, [detail]);
+  const detailBusy = savingContent || detailIsApproving;
+
+  const reportParts = useMemo(
+    () => splitReportContent(detail?.content ?? ""),
+    [detail?.content],
+  );
+
+  const contentDirty = useMemo(() => {
+    if (!contentEditing) return false;
+    return editDraft.trim() !== reportParts.commentBody.trim();
+  }, [contentEditing, editDraft, reportParts.commentBody]);
+
+  const detailMainText = useMemo(() => {
+    const main = reportParts.main;
+    return main ? main : null;
+  }, [reportParts.main]);
+
+  const detailCommentText = useMemo(() => {
+    const comment = reportParts.commentBody;
+    return comment ? comment : null;
+  }, [reportParts.commentBody]);
 
   const mdComponents = useMemo(
     () => ({
@@ -218,9 +385,7 @@ const Reports = () => {
       strong: (props) => <strong className="clr-md-strong" {...props} />,
       em: (props) => <em className="clr-md-em" {...props} />,
       hr: (props) => <hr className="clr-md-hr" {...props} />,
-      blockquote: (props) => (
-        <blockquote className="clr-md-quote" {...props} />
-      ),
+      blockquote: (props) => <blockquote className="clr-md-quote" {...props} />,
       table: ({ children, ...rest }) => (
         <div className="clr-table-wrap">
           <table className="clr-md-table" {...rest}>
@@ -238,13 +403,19 @@ const Reports = () => {
   );
 
   const persistApprovedReport = (reportId, apiPayload = null) => {
-    const row = reports.find((r) => String(reportRowId(r)) === String(reportId));
+    const row = reports.find(
+      (r) => String(reportRowId(r)) === String(reportId),
+    );
     const approvedAt = new Date().toISOString();
     const approvedReport = {
       ...row,
       ...detail,
       ...(apiPayload || {}),
-      id: reportRowId(apiPayload) ?? reportRowId(detail) ?? reportRowId(row) ?? reportId,
+      id:
+        reportRowId(apiPayload) ??
+        reportRowId(detail) ??
+        reportRowId(row) ??
+        reportId,
       child_id:
         apiPayload?.child_id ??
         apiPayload?.childId ??
@@ -265,7 +436,11 @@ const Reports = () => {
     setReports((prev) =>
       prev.map((r) =>
         String(reportRowId(r)) === String(reportId)
-          ? { ...r, ...approvedReport, content: r.content ?? approvedReport.content }
+          ? {
+              ...r,
+              ...approvedReport,
+              content: r.content ?? approvedReport.content,
+            }
           : r,
       ),
     );
@@ -274,15 +449,21 @@ const Reports = () => {
   };
 
   const handleApproveDetail = async () => {
-    const reportId = detailReportId || reportRowId(detail);
-    if (!reportId || detailIsApproving) return;
+    const reportId = resolveActiveReportId(detail, detailReportId);
+    if (!reportId) {
+      toast.error("Không xác định được mã báo cáo. Hãy đóng và mở lại chi tiết.");
+      return;
+    }
+    if (detailIsApproving) return;
 
     setApprovingReportId(String(reportId));
     try {
       const res = await GuardianAPI.approveReport(reportId, selectedChildId);
       const apiPayload = normalizeReportDetail(res);
       persistApprovedReport(reportId, apiPayload);
-      toast.success("Đã duyệt báo cáo. Phụ huynh có thể xem trong Báo cáo tuần.");
+      toast.success(
+        "Đã duyệt báo cáo. Phụ huynh có thể xem trong Báo cáo tuần.",
+      );
       if (selectedChildId) await fetchReports(selectedChildId);
     } catch (err) {
       toast.error(humanizeApiError(err, "Duyệt báo cáo thất bại."));
@@ -370,7 +551,7 @@ const Reports = () => {
         ) : (
           <div className="clr-list">
             {reports.map((r) => (
-              <div className="clr-item" key={r.id || JSON.stringify(r)}>
+              <div className="clr-item" key={reportRowId(r) || JSON.stringify(r)}>
                 <div className="clr-item__left">
                   <div className="clr-item__title">
                     {r.report_type === "WEEKLY"
@@ -378,7 +559,8 @@ const Reports = () => {
                       : r.report_type || "Báo cáo"}
                   </div>
                   <div className="clr-item__sub">
-                    Kỳ: {formatDate(r.period_start)} — {formatDate(r.period_end)}
+                    Kỳ: {formatDate(r.period_start)} —{" "}
+                    {formatDate(r.period_end)}
                     {r.created_at ? (
                       <> · Tạo lúc {formatDateTime(r.created_at)}</>
                     ) : null}
@@ -391,7 +573,7 @@ const Reports = () => {
                   <button
                     className="clr-item__link"
                     type="button"
-                    onClick={() => openDetail(r.id)}
+                    onClick={() => openDetail(reportRowId(r))}
                   >
                     Xem chi tiết
                   </button>
@@ -403,11 +585,7 @@ const Reports = () => {
       </div>
 
       {detailOpen ? (
-        <div
-          className="clr-overlay"
-          role="presentation"
-          onClick={closeDetail}
-        >
+        <div className="clr-overlay" role="presentation" onClick={closeDetail}>
           <div
             className="clr-modal"
             role="dialog"
@@ -424,7 +602,17 @@ const Reports = () => {
                   type="button"
                   className="clr-modal__approve"
                   onClick={handleApproveDetail}
-                  disabled={detailLoading || detailIsApproved || detailIsApproving}
+                  disabled={
+                    detailLoading ||
+                    detailIsApproved ||
+                    detailBusy ||
+                    contentEditing
+                  }
+                  title={
+                    contentEditing
+                      ? "Lưu hoặc hủy chỉnh sửa trước khi duyệt"
+                      : undefined
+                  }
                 >
                   {detailIsApproved
                     ? "Đã duyệt"
@@ -477,18 +665,86 @@ const Reports = () => {
                     <p>{detail.ai_disclaimer}</p>
                   </div>
                 ) : null}
-                {detailBodyText ? (
-                  <article className="clr-prose">
+                {detailMainText ? (
+                  <article className="clr-prose clr-prose--report">
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       components={mdComponents}
                     >
-                      {detailBodyText}
+                      {detailMainText}
                     </ReactMarkdown>
                   </article>
-                ) : (
-                  <div className="clr-hint">Báo cáo chưa có nội dung.</div>
-                )}
+                ) : null}
+                <section
+                  className="clr-notes"
+                  aria-labelledby="clr-notes-title"
+                >
+                  <div className="clr-notes__head">
+                    <h3 id="clr-notes-title" className="clr-notes__title">
+                      Nhận xét
+                    </h3>
+                    {!detailIsApproved ? (
+                      <div className="clr-notes__actions">
+                        {contentEditing ? (
+                          <>
+                            <button
+                              type="button"
+                              className="clr-notes__btn clr-notes__btn--ghost"
+                              onClick={cancelContentEdit}
+                              disabled={savingContent}
+                            >
+                              Hủy
+                            </button>
+                            <button
+                              type="button"
+                              className="clr-notes__btn clr-notes__btn--primary"
+                              onClick={handleSaveContent}
+                              disabled={savingContent || !contentDirty}
+                            >
+                              {savingContent ? "Đang lưu..." : "Lưu"}
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="clr-notes__btn clr-notes__btn--edit"
+                            onClick={startContentEdit}
+                            disabled={detailBusy}
+                          >
+                            Chỉnh sửa
+                          </button>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                  <article
+                    className={`clr-prose clr-prose--in-notes${
+                      contentEditing ? " clr-prose--editing" : ""
+                    }`}
+                  >
+                    {contentEditing ? (
+                      <textarea
+                        className="clr-notes__textarea clr-notes__textarea--inline"
+                        value={editDraft}
+                        onChange={(e) => setEditDraft(e.target.value)}
+                        disabled={savingContent}
+                        rows={10}
+                        spellCheck
+                        placeholder="Nhập nhận xét..."
+                        aria-label="Nhận xét báo cáo"
+                      />
+                    ) : detailCommentText ? (
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={mdComponents}
+                      >
+                        {detailCommentText}
+                      </ReactMarkdown>
+                    ) : (
+                      <p className="clr-notes__empty">Chưa có nhận xét.</p>
+                    )}
+                  </article>
+                </section>
               </div>
             ) : (
               <div className="clr-detail clr-detail--loading">

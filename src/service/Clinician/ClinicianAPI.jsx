@@ -254,6 +254,24 @@ const postReward = async (name, description, cost, stock, image_url) => {
     throw error;
   }
 };
+
+//chinh sua report
+const updateReportContent = async (reportId, content) => {
+  const payload = {
+    content,
+  };
+  try {
+    const response = await instance.patch(
+      `reports/${reportId}/content`,
+      payload,
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error updating report:", error);
+    throw error;
+  }
+};
+
 export default {
   uploadCoverImage,
   // content
@@ -274,4 +292,7 @@ export default {
   // rewards
   getRewards,
   postReward,
+
+  // reports
+  updateReportContent,
 };

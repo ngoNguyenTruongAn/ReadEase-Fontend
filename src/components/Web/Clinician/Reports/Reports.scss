@@ -403,6 +403,143 @@ $navy: #1a2b4a;
   font-size: 0.85rem;
 }
 
+.clr-notes {
+  margin-top: 4px;
+  border-radius: 14px;
+  border: 1px solid rgba($navy, 0.1);
+  background: #fff;
+  overflow: hidden;
+}
+
+.clr-notes__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba($navy, 0.08);
+  background: rgba($navy, 0.03);
+}
+
+.clr-notes__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 900;
+  color: $navy;
+  letter-spacing: -0.01em;
+}
+
+.clr-notes__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.clr-notes__btn {
+  padding: 7px 14px;
+  border-radius: 9px;
+  font-weight: 800;
+  font-size: 0.86rem;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  transition: background 0.15s ease, border-color 0.15s ease;
+
+  &--edit {
+    background: rgba($primary-color, 0.1);
+    border-color: rgba($primary-color, 0.35);
+    color: $primary-color;
+
+    &:hover:not(:disabled) {
+      background: rgba($primary-color, 0.16);
+    }
+  }
+
+  &--ghost {
+    background: #fff;
+    border-color: rgba($navy, 0.18);
+    color: rgba($navy, 0.75);
+
+    &:hover:not(:disabled) {
+      background: rgba($navy, 0.04);
+    }
+  }
+
+  &--primary {
+    background: $primary-color;
+    color: #fff;
+    border-color: $primary-color;
+
+    &:hover:not(:disabled) {
+      filter: brightness(1.05);
+    }
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+}
+
+.clr-notes__empty {
+  margin: 0;
+  color: rgba($navy, 0.45);
+  font-weight: 650;
+  font-style: italic;
+}
+
+.clr-notes__textarea--inline {
+  display: block;
+  width: 100%;
+  min-height: 10rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: inherit;
+  color: inherit;
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+
+  &::placeholder {
+    color: rgba($navy, 0.38);
+    font-style: italic;
+  }
+
+  &:focus {
+    outline: none;
+    box-shadow: none;
+  }
+
+  &:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+}
+
+.clr-prose--report {
+  margin-bottom: 14px;
+  max-height: min(42vh, 420px);
+}
+
+.clr-prose--in-notes {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  max-height: min(40vh, 380px);
+}
+
+.clr-prose--editing {
+  outline: 2px solid rgba($primary-color, 0.35);
+  outline-offset: -2px;
+  background: rgba($primary-color, 0.03);
+}
+
 .clr-prose {
   padding: 20px 22px 8px;
   border-radius: 14px;
