@@ -37,7 +37,7 @@ $children-side-viewport-gap: 52px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 42px 56px;
+  padding: 46px 32px;
   overflow-x: hidden;
   overflow-y: auto;
   z-index: 1;
@@ -391,7 +391,7 @@ $children-side-viewport-gap: 52px;
 
 .children-side-story {
   width: 100%;
-  max-width: 220px;
+  max-width: 280px;
   margin: 0 auto;
   text-align: left;
 }
@@ -403,7 +403,7 @@ $children-side-viewport-gap: 52px;
   overflow: hidden;
   background: #ffffff;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
-  margin-bottom: 12px;
+  margin-bottom: 24px;
 }
 
 .children-side-story-cover-img {
@@ -478,6 +478,7 @@ $children-side-viewport-gap: 52px;
   display: flex;
   flex-direction: column;
   margin: 0 30px;
+  padding-top: 52px;
   min-height: 100vh;
   height: 100vh;
   min-height: 0;
