@@ -312,7 +312,9 @@ const Reports = () => {
   const handleSaveContent = async () => {
     const reportId = resolveActiveReportId(detail, detailReportId);
     if (!reportId) {
-      toast.error("Không xác định được mã báo cáo. Hãy đóng và mở lại chi tiết.");
+      toast.error(
+        "Không xác định được mã báo cáo. Hãy đóng và mở lại chi tiết.",
+      );
       return;
     }
     if (savingContent) return;
@@ -451,7 +453,9 @@ const Reports = () => {
   const handleApproveDetail = async () => {
     const reportId = resolveActiveReportId(detail, detailReportId);
     if (!reportId) {
-      toast.error("Không xác định được mã báo cáo. Hãy đóng và mở lại chi tiết.");
+      toast.error(
+        "Không xác định được mã báo cáo. Hãy đóng và mở lại chi tiết.",
+      );
       return;
     }
     if (detailIsApproving) return;
@@ -551,7 +555,10 @@ const Reports = () => {
         ) : (
           <div className="clr-list">
             {reports.map((r) => (
-              <div className="clr-item" key={reportRowId(r) || JSON.stringify(r)}>
+              <div
+                className="clr-item"
+                key={reportRowId(r) || JSON.stringify(r)}
+              >
                 <div className="clr-item__left">
                   <div className="clr-item__title">
                     {r.report_type === "WEEKLY"

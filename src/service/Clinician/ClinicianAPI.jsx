@@ -257,11 +257,10 @@ const postReward = async (name, description, cost, stock, image_url) => {
 
 //chinh sua report
 const updateReportContent = async (reportId, content) => {
-  const payload = {
-    content,
-  };
+  const payload = { content };
   try {
     const response = await instance.patch(
+      // ← PATCH
       `reports/${reportId}/content`,
       payload,
     );
