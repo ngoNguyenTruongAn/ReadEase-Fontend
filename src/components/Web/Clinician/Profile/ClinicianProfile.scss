@@ -2,73 +2,249 @@
 
 .clpr {
   width: 100%;
+  max-width: 900px; // Giới hạn chiều ngang để giao diện không bị loãng
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px;
+  padding: 20px;
 }
 
 .clpr-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
+  margin-bottom: 8px;
 }
 
 .clpr-title {
-  font-size: 1.35rem;
-  font-weight: 950;
+  font-size: 1.8rem;
+  font-weight: 900;
   color: $text-main;
-  line-height: 1.1;
 }
 
 .clpr-subtitle {
-  margin-top: 6px;
+  margin-top: 8px;
   color: $text-secondary;
   font-weight: 600;
-  max-width: 720px;
+}
+
+.clpr-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
 .clpr-card {
-  background: rgba(255, 255, 255, 0.85);
-  border-radius: 18px;
-  padding: 16px;
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.05);
-}
+  background: #FFFFFF;
+  border-radius: 24px; // Bo góc lớn đồng bộ với library card
+  padding: 28px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
 
-.clpr-card__title {
-  font-weight: 950;
-  color: $text-main;
-  margin-bottom: 12px;
-  font-size: 1.05rem;
+  &__title {
+    font-weight: 900;
+    color: $text-main;
+    margin-bottom: 20px;
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+  }
+
+  &__desc {
+    color: $text-secondary;
+    font-size: 0.95rem;
+    margin-bottom: 20px;
+    font-weight: 600;
+  }
 }
 
 .clpr-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
 }
 
 .clpr-field {
+  background: #F8FAFB; // Màu nền nhẹ cho input placeholder
+  padding: 16px 20px;
+  border-radius: 16px;
+  border: 1px solid #F0F2F5;
+
+  &__label {
+    color: $text-secondary;
+    font-weight: 700;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  &__value {
+    margin-top: 6px;
+    color: $text-main;
+    font-weight: 800;
+    font-size: 1.05rem;
+  }
+}
+
+/* Nút bấm đồng bộ với các giao diện khác */
+.clpr-btn {
+  padding: 12px 24px;
   border-radius: 14px;
-  background: rgba($bg-navbar, 0.45);
-  padding: 12px 14px;
+  font-weight: 900;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  &--primary {
+    background: $primary-color; // Sử dụng màu xanh mint của app
+    color: white;
+    
+    &:hover {
+      background: darken($primary-color, 8%);
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba($primary-color, 0.3);
+    }
+  }
 }
 
-.clpr-field__label {
-  color: $text-secondary;
-  font-weight: 850;
-  font-size: 0.88rem;
+/* --- Overlay che toàn màn hình --- */
+.clpr-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.4); // Nền tối mờ
+  backdrop-filter: blur(4px);    // Làm mờ nhẹ phía sau
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;                 // Luôn nằm trên cùng
+  padding: 20px;
 }
 
-.clpr-field__value {
-  margin-top: 6px;
-  color: $text-main;
-  font-weight: 950;
+/* --- Khung Modal chính --- */
+.clpr-modal {
+  background: #FFFFFF;
+  width: 100%;
+  max-width: 450px;
+  border-radius: 28px;           // Bo góc lớn đồng bộ
+  padding: 32px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
+  animation: modalAppear 0.3s ease-out; // Hiệu ứng hiện ra mượt
+
+  h3 {
+    font-size: 1.5rem;
+    font-weight: 950;
+    color: $text-main;
+    margin-bottom: 24px;
+    text-align: center;
+  }
 }
 
-@media (max-width: 820px) {
+/* --- Các nhóm Input trong Modal --- */
+.clpr-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.clpr-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  label {
+    font-weight: 800;
+    color: $text-secondary;
+    font-size: 0.9rem;
+    padding-left: 4px;
+  }
+
+  input {
+    padding: 14px 18px;
+    border-radius: 14px;
+    border: 2px solid #F0F2F5;
+    background: #F8FAFB;
+    font-weight: 700;
+    transition: all 0.2s;
+
+    &:focus {
+      outline: none;
+      border-color: $primary-color;
+      background: #FFFFFF;
+    }
+
+    &.error {
+      border-color: #FF6B6B;
+    }
+  }
+
+  .err-msg {
+    color: #FF6B6B;
+    font-size: 0.8rem;
+    font-weight: 700;
+    padding-left: 4px;
+  }
+}
+
+/* --- Nút bấm trong Modal --- */
+.clpr-modal-footer {
+  margin-top: 32px;
+  display: flex;
+  gap: 12px;
+
+  button {
+    flex: 1;
+    padding: 14px;
+    border-radius: 14px;
+    font-weight: 900;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-cancel {
+    background: #F0F2F5;
+    color: $text-secondary;
+    border: none;
+
+    &:hover {
+      background: #E4E6E9;
+    }
+  }
+
+  .btn-submit {
+    background: $primary-color;
+    color: white;
+    border: none;
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    &:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba($primary-color, 0.3);
+    }
+  }
+}
+
+/* --- Hiệu ứng Animation --- */
+@keyframes modalAppear {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 600px) {
   .clpr-grid {
     grid-template-columns: 1fr;
   }
 }
-

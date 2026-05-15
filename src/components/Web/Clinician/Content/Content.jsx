@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import ClinicianAPI from "../../../../service/Clinician/ClinicianAPI";
 import "./Content.scss";
@@ -46,6 +46,9 @@ const getErrorMessage = (err, fallback) => {
 };
 
 const Content = () => {
+  const createCoverInputRef = useRef(null);
+  const editCoverInputRef = useRef(null);
+
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [items, setItems] = useState([]);
@@ -266,6 +269,25 @@ const Content = () => {
     }
   };
 
+  const applyPickedCoverFile = async (file, setUrl) => {
+    if (!file) return;
+
+    try {
+      setSubmitting(true);
+      toast.info("Đang xử lý ảnh...");
+
+      // Gọi hàm từ API file
+      const shortUrl = await ClinicianAPI.uploadCoverImage(file);
+      
+      setUrl(shortUrl); // Cập nhật state với link ngắn (~100 ký tự)
+      toast.success("Tải ảnh lên thành công!");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Lỗi khi tải ảnh lên Supabase."));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="clc">
       <div className="clc-header">
@@ -326,13 +348,34 @@ const Content = () => {
 
           <label className="clc-field">
             <span className="clc-field__label">Cover image URL (tuỳ chọn)</span>
-            <input
-              className="clc-field__input"
-              value={coverUrl}
-              onChange={(e) => setCoverUrl(e.target.value)}
-              placeholder="https://..."
-              autoComplete="off"
-            />
+            <div className="clc-coverRow">
+              <input
+                className="clc-field__input clc-field__input--flex"
+                value={coverUrl}
+                onChange={(e) => setCoverUrl(e.target.value)}
+                placeholder="https://... hoặc chọn ảnh từ máy"
+                autoComplete="off"
+              />
+              <input
+                ref={createCoverInputRef}
+                type="file"
+                accept="image/*"
+                className="clc-fileInputHidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) applyPickedCoverFile(file, setCoverUrl);
+                  e.target.value = "";
+                }}
+              />
+              <button
+                type="button"
+                className="clc-filePick"
+                onClick={() => createCoverInputRef.current?.click()}
+                disabled={submitting}
+              >
+                Chọn ảnh
+              </button>
+            </div>
           </label>
         </div>
 
@@ -474,12 +517,34 @@ const Content = () => {
 
               <label className="clc-field">
                 <span className="clc-field__label">Cover image URL</span>
-                <input
-                  className="clc-field__input"
-                  value={editCoverUrl}
-                  onChange={(e) => setEditCoverUrl(e.target.value)}
-                  autoComplete="off"
-                />
+                <div className="clc-coverRow">
+                  <input
+                    className="clc-field__input clc-field__input--flex"
+                    value={editCoverUrl}
+                    onChange={(e) => setEditCoverUrl(e.target.value)}
+                    placeholder="https://... hoặc chọn ảnh từ máy"
+                    autoComplete="off"
+                  />
+                  <input
+                    ref={editCoverInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="clc-fileInputHidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) applyPickedCoverFile(file, setEditCoverUrl);
+                      e.target.value = "";
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="clc-filePick"
+                    onClick={() => editCoverInputRef.current?.click()}
+                    disabled={submitting}
+                  >
+                    Chọn ảnh
+                  </button>
+                </div>
               </label>
             </div>
 

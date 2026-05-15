@@ -957,7 +957,7 @@ const ChildrenLayout = () => {
                 className="children-coin-icon"
               />
 
-              {isProfileRoute && (
+              {/* {isProfileRoute && (
                 <button
                   type="button"
                   className="children-logout-btn"
@@ -965,7 +965,7 @@ const ChildrenLayout = () => {
                 >
                   Đăng xuất
                 </button>
-              )}
+              )} */}
             </div>
           </header>
 

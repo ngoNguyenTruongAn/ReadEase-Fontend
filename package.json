@@ -14,6 +14,7 @@
     "content:backfill:apply": "node scripts/backfill-content-urls.mjs --apply"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.105.4",
     "axios": "^1.13.6",
     "icons": "^1.0.0",
     "jwt-decode": "^4.0.0",

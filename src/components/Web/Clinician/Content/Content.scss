@@ -110,6 +110,56 @@
   }
 }
 
+.clc-coverRow {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.clc-field__input--flex {
+  flex: 1 1 160px;
+  width: auto;
+}
+
+.clc-fileInputHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.clc-filePick {
+  flex: 0 0 auto;
+  height: 46px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 2px solid rgba($primary-color, 0.35);
+  background: rgba(255, 255, 255, 0.75);
+  color: $primary-color;
+  font-weight: 900;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.15s ease;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    background: #ffffff;
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+  }
+}
+
 .clc-field__textarea {
   width: 100%;
   min-height: 140px;
