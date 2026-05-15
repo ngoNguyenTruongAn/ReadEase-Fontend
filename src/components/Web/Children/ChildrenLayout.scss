@@ -17,6 +17,7 @@ $children-layout-gap: 44px;
 
 .children-home-page {
   max-width: $children-shell-max-width;
+  background: linear-gradient(135deg, #FFFFFF 0%, #FFFDF0 50%, #FFF9E5 100%);
   width: 100%;
   min-height: 100vh;
   margin: 0 auto;
@@ -26,12 +27,17 @@ $children-layout-gap: 44px;
 }
 
 .children-side {
-  width: 260px;
   background: rgba($bg-children-side, 0.2);
+  width: 290px; 
+  min-height: 100%; 
+  border: 2px solid #F0EAD6; // Màu viền nhẹ
+  border-radius: 24px; 
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 40px 24px;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 40px 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  margin: 16px;
   overflow-y: auto;
   z-index: 1;
 }
@@ -42,8 +48,8 @@ $children-layout-gap: 44px;
 }
 
 .children-side-illustration {
-  width: 200px;
-  height: 200px;
+  width: 250px;
+  height: 250px;
   margin: 0 auto 24px;
   display: flex;
   align-items: center;
@@ -101,9 +107,10 @@ $children-layout-gap: 44px;
 }
 
 .children-side-profile-header {
+  text-align: left; // Căn lùi trái như thiết kế
   width: 100%;
   padding: 0 10px;
-  margin-bottom: 14px;
+  margin-top: 20px;
 }
 
 .children-side-profile-name {

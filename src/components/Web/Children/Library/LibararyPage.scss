@@ -52,32 +52,44 @@
   position: relative;
   z-index: 0;
   box-sizing: border-box;
-  border: none;
-  padding: 24px 32px;
+  
+  // 1. Thêm Border mặc định (màu rất nhạt hoặc trong suốt)
+  border: 2px solid #F0F0F0; 
+  border-radius: 20px; // Bo góc mềm mại
+  
+  padding: 24px; // Điều chỉnh lại padding cho cân đối
   background: #FFFFFF;
   text-align: left;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 12px;
-  transition:
-    transform 0.15s ease-out;
+  gap: 16px;
+  
+  // 2. Hiệu ứng nổi mặc định
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+  
+  transition: all 0.2s ease-out;
 
   &:hover {
-    transform: translateY(-2px);
+    // 3. Hiệu ứng nổi mạnh hơn khi hover
+    transform: translateY(-5px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+    border-color: rgba($primary-color, 0.3); // Viền sáng lên nhẹ khi hover
     z-index: 1;
+  }
+
+  // 4. Trạng thái ĐƯỢC CHỌN (Active)
+  // Giả sử bạn dùng React và thêm class 'active' khi click
+  &.active, 
+  &:focus-within {
+    border-color: $primary-color; // Màu xanh đặc trưng như trong hình
+    background: #FFFFFF;
+    box-shadow: 0 8px 20px rgba($primary-color, 0.15);
   }
 
   &:focus-visible {
     outline: none;
-    z-index: 1;
-  }
-
-  &:focus-visible .library-card-cover {
-    box-shadow:
-      0 8px 26px rgba(0, 0, 0, 0.12),
-      0 0 0 4px rgba($primary-color, 0.18);
+    border-color: $primary-color;
   }
 }
 

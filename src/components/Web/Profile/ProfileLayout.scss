@@ -7,6 +7,8 @@ $navy: #1a2b4a;
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
+  height: 100%; 
+  min-height: 80vh;
 }
 
 .profile-collection {
@@ -17,10 +19,12 @@ $navy: #1a2b4a;
   padding: 28px;
   border-radius: 28px;
   background: linear-gradient(180deg, #fffdf8 0%, #fff8ef 100%);
-
   border: 1px solid rgba(26, 43, 74, 0.06);
-
   box-shadow: 0 10px 35px rgba(26, 43, 74, 0.06);
+  display: flex;
+  flex-direction: column;
+  flex: 1; /* Tự động kéo dài để lấp đầy khoảng trống của cha */
+  min-height: 100%; /* Đảm bảo luôn cao ít nhất bằng cha */
 }
 
 // ─────────────────── Header ───────────────────
