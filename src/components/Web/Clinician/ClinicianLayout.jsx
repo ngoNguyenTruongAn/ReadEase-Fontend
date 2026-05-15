@@ -68,6 +68,15 @@ const ClinicianLayout = () => {
               >
                 Hồ sơ
               </NavLink>
+
+              <NavLink
+                to="/clinician/rewards"
+                className={({ isActive }) =>
+                  `clinician-nav-link ${isActive ? "is-active" : ""}`
+                }
+              >
+                Phần thưởng
+              </NavLink>
             </nav>
           </div>
 

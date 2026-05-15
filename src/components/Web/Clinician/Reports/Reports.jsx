@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { toast } from "react-toastify";
 import GuardianAPI from "../../../../service/Guardian/GuardianAPI";
 import { humanizeApiError } from "../../../../service/instance";
@@ -198,6 +200,42 @@ const Reports = () => {
 
   const detailIsApproving =
     approvingReportId && String(approvingReportId) === String(detailReportId);
+
+  const detailBodyText = useMemo(() => {
+    const raw = detail?.content;
+    return typeof raw === "string" && raw.trim() ? raw : null;
+  }, [detail]);
+
+  const mdComponents = useMemo(
+    () => ({
+      h1: (props) => <h1 className="clr-md-h1" {...props} />,
+      h2: (props) => <h2 className="clr-md-h2" {...props} />,
+      h3: (props) => <h3 className="clr-md-h3" {...props} />,
+      p: (props) => <p className="clr-md-p" {...props} />,
+      ul: (props) => <ul className="clr-md-ul" {...props} />,
+      ol: (props) => <ol className="clr-md-ol" {...props} />,
+      li: (props) => <li className="clr-md-li" {...props} />,
+      strong: (props) => <strong className="clr-md-strong" {...props} />,
+      em: (props) => <em className="clr-md-em" {...props} />,
+      hr: (props) => <hr className="clr-md-hr" {...props} />,
+      blockquote: (props) => (
+        <blockquote className="clr-md-quote" {...props} />
+      ),
+      table: ({ children, ...rest }) => (
+        <div className="clr-table-wrap">
+          <table className="clr-md-table" {...rest}>
+            {children}
+          </table>
+        </div>
+      ),
+      thead: (props) => <thead className="clr-md-thead" {...props} />,
+      tbody: (props) => <tbody className="clr-md-tbody" {...props} />,
+      tr: (props) => <tr className="clr-md-tr" {...props} />,
+      th: (props) => <th className="clr-md-th" {...props} />,
+      td: (props) => <td className="clr-md-td" {...props} />,
+    }),
+    [],
+  );
 
   const persistApprovedReport = (reportId, apiPayload = null) => {
     const row = reports.find((r) => String(reportRowId(r)) === String(reportId));
@@ -404,29 +442,58 @@ const Reports = () => {
               </div>
             </div>
             {detailLoading ? (
-              <div className="clr-hint">Đang tải...</div>
+              <div className="clr-detail clr-detail--loading">
+                <div className="clr-hint">Đang tải nội dung báo cáo...</div>
+              </div>
             ) : detail ? (
               <div className="clr-detail">
                 <div className="clr-detail__meta">
-                  <span>
-                    Kỳ: {formatDate(detail.period_start)} —{" "}
+                  <span className="clr-detail__meta-item">
+                    <span className="clr-detail__meta-label">Kỳ báo cáo</span>
+                    {formatDate(detail.period_start)} —{" "}
                     {formatDate(detail.period_end)}
                   </span>
                   {detail.created_at ? (
-                    <span>Tạo: {formatDateTime(detail.created_at)}</span>
+                    <span className="clr-detail__meta-item">
+                      <span className="clr-detail__meta-label">Tạo lúc</span>
+                      {formatDateTime(detail.created_at)}
+                    </span>
                   ) : null}
+                  {detailIsApproved ? (
+                    <span className="clr-detail__badge clr-detail__badge--approved">
+                      Đã duyệt
+                    </span>
+                  ) : (
+                    <span className="clr-detail__badge clr-detail__badge--pending">
+                      Chờ duyệt
+                    </span>
+                  )}
                 </div>
                 {detail.ai_disclaimer ? (
-                  <div className="clr-disclaimer">{detail.ai_disclaimer}</div>
+                  <div className="clr-disclaimer" role="note">
+                    <span className="clr-disclaimer__icon" aria-hidden="true">
+                      ℹ
+                    </span>
+                    <p>{detail.ai_disclaimer}</p>
+                  </div>
                 ) : null}
-                <div className="clr-mdWrap">
-                  <pre className="clr-mdContent">
-                    {detail.content ?? "—"}
-                  </pre>
-                </div>
+                {detailBodyText ? (
+                  <article className="clr-prose">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={mdComponents}
+                    >
+                      {detailBodyText}
+                    </ReactMarkdown>
+                  </article>
+                ) : (
+                  <div className="clr-hint">Báo cáo chưa có nội dung.</div>
+                )}
               </div>
             ) : (
-              <div className="clr-hint">Không có dữ liệu.</div>
+              <div className="clr-detail clr-detail--loading">
+                <div className="clr-hint">Không có dữ liệu.</div>
+              </div>
             )}
           </div>
         </div>

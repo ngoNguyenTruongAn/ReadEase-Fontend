@@ -77,7 +77,7 @@ const uploadCoverImage = async (file) => {
 
     // 1. Upload lên bucket 'contents'
     const { data, error } = await supabase.storage
-      .from("contents") 
+      .from("contents")
       .upload(filePath, file);
 
     if (error) throw error;
@@ -227,6 +227,33 @@ const getChildSessions = async (childId, params = {}) => {
   }
 };
 
+const getRewards = async () => {
+  try {
+    const response = await instance.get("rewards");
+    return response.data;
+  } catch (error) {
+    console.error("Error getting rewards:", error);
+    throw error;
+  }
+};
+
+const postReward = async (name, description, cost, stock, image_url) => {
+  const payload = {
+    name,
+    description,
+    cost,
+    stock,
+  };
+  const imageUrl = String(image_url ?? "").trim();
+  if (imageUrl) payload.image_url = imageUrl;
+  try {
+    const response = await instance.post("rewards", payload);
+    return response.data;
+  } catch (error) {
+    console.error("Error posting reward:", error);
+    throw error;
+  }
+};
 export default {
   uploadCoverImage,
   // content
@@ -243,4 +270,8 @@ export default {
   // sessions
   getSessionReplay,
   getChildSessions,
+
+  // rewards
+  getRewards,
+  postReward,
 };
