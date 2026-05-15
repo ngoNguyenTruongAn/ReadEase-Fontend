@@ -9,6 +9,134 @@ import { toast } from "react-toastify";
 import ChildrenAPI from "../../../service/Children/ChildrenAPI";
 import { saveSelectedStory } from "./Reading/readingUtils";
 
+const guardianSourceKeys = [
+  "guardians",
+  "guardian",
+  "guardianList",
+  "guardian_list",
+  "linkedGuardians",
+  "linked_guardians",
+  "childGuardians",
+  "child_guardians",
+  "childGuardian",
+  "child_guardian",
+  "parents",
+  "parent",
+  "parentList",
+  "parent_list",
+  "linkedParents",
+  "linked_parents",
+  "caregivers",
+  "caregiver",
+];
+
+const guardianNestedKeys = [
+  "guardian",
+  "parent",
+  "caregiver",
+  "user",
+  "account",
+  "profile",
+  "guardianUser",
+  "guardian_user",
+  "parentUser",
+  "parent_user",
+];
+
+const textOrEmpty = (value) => String(value ?? "").trim();
+
+const compactName = (...values) =>
+  values.map(textOrEmpty).filter(Boolean).join(" ").trim();
+
+const toList = (value) => {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+};
+
+const unwrapPayloadRoot = (payload) =>
+  payload?.data ?? payload?.user ?? payload?.profile ?? payload;
+
+const guardianNameFrom = (value, seen = new Set()) => {
+  if (!value) return "";
+  if (typeof value === "string") return textOrEmpty(value);
+  if (typeof value !== "object") return "";
+  if (seen.has(value)) return "";
+  seen.add(value);
+
+  const name =
+    textOrEmpty(value.display_name) ||
+    textOrEmpty(value.displayName) ||
+    textOrEmpty(value.full_name) ||
+    textOrEmpty(value.fullName) ||
+    compactName(value.first_name, value.last_name) ||
+    compactName(value.firstName, value.lastName) ||
+    textOrEmpty(value.name) ||
+    textOrEmpty(value.username) ||
+    textOrEmpty(value.userName) ||
+    textOrEmpty(value.email);
+
+  if (name) return name;
+
+  for (const key of guardianNestedKeys) {
+    const nestedName = guardianNameFrom(value?.[key], seen);
+    if (nestedName) return nestedName;
+  }
+
+  return "";
+};
+
+const collectGuardianSources = (value, includeSelf = false) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return [value];
+  if (typeof value !== "object") return [value];
+
+  const sources = includeSelf ? [value] : [];
+  for (const key of guardianSourceKeys) {
+    if (value?.[key]) sources.push(value[key]);
+  }
+  return sources;
+};
+
+const pickGuardianNames = (payload, { includeRoot = false } = {}) => {
+  const root = unwrapPayloadRoot(payload);
+  const contexts = [
+    payload,
+    root,
+    root?.child,
+    root?.user,
+    root?.profile,
+    root?.account,
+  ].filter(Boolean);
+  const seen = new Set();
+  const sources = contexts.flatMap((context) =>
+    collectGuardianSources(context, includeRoot && context === root),
+  );
+
+  return sources
+    .flatMap(toList)
+    .map((item) => guardianNameFrom(item))
+    .map(textOrEmpty)
+    .filter(Boolean)
+    .filter((name) => {
+      const key = name.toLocaleLowerCase("vi-VN");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 2);
+};
+
+const pickChildId = (root) =>
+  textOrEmpty(
+    root?.id ||
+      root?._id ||
+      root?.user_id ||
+      root?.childId ||
+      root?.child_id ||
+      root?.child?.id ||
+      root?.child?._id,
+  );
+
 const ChildrenLayout = () => {
   const defaultSideStory = useMemo(
     () => ({ kind: "default", src: redMonster, alt: "ReadEase" }),
@@ -55,15 +183,7 @@ const ChildrenLayout = () => {
       try {
         const payload = await AuthAPI.getProfileAPI();
         const root = payload?.data ?? payload?.user ?? payload ?? {};
-        const id = String(
-          root?.id ||
-            root?._id ||
-            root?.user_id ||
-            root?.childId ||
-            root?.child_id ||
-            root?.child?.id ||
-            "",
-        ).trim();
+        const id = pickChildId(root);
         if (cancelled) return;
         if (!id) {
           setChildId("");
@@ -274,35 +394,6 @@ const ChildrenLayout = () => {
       }
     };
 
-    const pickGuardians = (root) => {
-      const raw =
-        root?.guardians ??
-        root?.guardian ??
-        root?.parents ??
-        root?.parent ??
-        root?.data?.guardians ??
-        [];
-
-      const arr = Array.isArray(raw) ? raw : [raw].filter(Boolean);
-      const names = arr
-        .map((g) => {
-          if (!g) return "";
-          if (typeof g === "string") return g;
-          return (
-            g?.displayName ??
-            g?.fullName ??
-            g?.name ??
-            g?.username ??
-            g?.userName ??
-            ""
-          );
-        })
-        .map((s) => String(s).trim())
-        .filter(Boolean);
-
-      return names.slice(0, 2);
-    };
-
     const loadProfile = async () => {
       try {
         const data = await AuthAPI.getProfileAPI();
@@ -330,12 +421,24 @@ const ChildrenLayout = () => {
           root?.created ??
           "";
 
+        let guardians = pickGuardianNames(data);
+        if (!guardians.length) {
+          try {
+            const guardianPayload = await ChildrenAPI.getGuardians();
+            guardians = pickGuardianNames(guardianPayload, {
+              includeRoot: true,
+            });
+          } catch {
+            guardians = [];
+          }
+        }
+
         if (cancelled) return;
         setProfileInfo({
           display_name: String(fullName || "").trim(),
           username: String(username || "").trim(),
           joinedAt: formatJoinedAt(joinedAtRaw),
-          guardians: pickGuardians(root),
+          guardians,
         });
       } catch {
         if (!cancelled)
@@ -484,7 +587,7 @@ const ChildrenLayout = () => {
                       <ul className="children-side-profile-guardian-list">
                         {(profileInfo.guardians?.length
                           ? profileInfo.guardians
-                          : ["Họ và tên người bảo hộ", "Họ và tên người bảo hộ"]
+                          : ["Chưa có thông tin người bảo hộ"]
                         ).map((name, idx) => (
                           <li
                             key={`${idx}-${name}`}
@@ -533,13 +636,6 @@ const ChildrenLayout = () => {
                     <h3 className="children-side-story-title">
                       {sideStory.title}
                     </h3>
-
-                    <div className="children-side-story-tags">
-                      <span className="children-side-story-tag">
-                        Truyện cổ tích
-                      </span>
-                      <span className="children-side-story-tag">Dân gian</span>
-                    </div>
 
                     <p className="children-side-story-desc">
                       {sideStory.description}

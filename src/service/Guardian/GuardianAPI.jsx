@@ -59,7 +59,38 @@ const getReportById = async (reportId) => {
   }
 };
 
+const isMissingApproveRoute = (error) => {
+  const status = error?.response?.status;
+  return status === 404 || status === 405;
+};
+
+const approveReport = async (reportId, childId) => {
+  const payload = childId ? { childId } : undefined;
+  const requests = [
+    () => instance.patch(`reports/${reportId}/approve`, payload),
+    () => instance.post(`reports/${reportId}/approve`, payload),
+    () => instance.patch(`reports/approve/${reportId}`, payload),
+    () => instance.post(`reports/approve/${reportId}`, payload),
+  ];
+
+  let lastError = null;
+  for (const run of requests) {
+    try {
+      const response = await run();
+      return response.data;
+    } catch (error) {
+      lastError = error;
+      if (!isMissingApproveRoute(error)) break;
+    }
+  }
+
+  logApiError(lastError, "GuardianAPI.approveReport");
+  console.error("Error approving report:", lastError);
+  throw lastError;
+};
+
 export default {
+  approveReport,
   createWeeklyReport,
   getChildren,
   postLinkChild,

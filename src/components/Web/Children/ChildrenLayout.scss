@@ -4,8 +4,9 @@
 $children-content-half-width: 600px;
 $children-shell-padding: 16px;
 $children-shell-max-width: 1232px;
-$children-side-width: 368px;
+$children-side-width: 386px;
 $children-layout-gap: 44px;
+$children-side-viewport-gap: 52px;
 
 .children-page {
   width: 100%;
@@ -26,25 +27,39 @@ $children-layout-gap: 44px;
 }
 
 .children-side {
-  width: 260px;
+  flex: 0 0 $children-side-width;
+  width: $children-side-width;
+  height: calc(100vh - #{2 * $children-side-viewport-gap});
+  margin: $children-side-viewport-gap 0;
+  box-sizing: border-box;
+  border-radius: 22px;
   background: rgba($bg-children-side, 0.2);
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  padding: 40px 24px;
+  padding: 42px 56px;
+  overflow-x: hidden;
   overflow-y: auto;
   z-index: 1;
 }
 
 .children-side-hero {
   width: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 44px;
   text-align: center;
+  box-sizing: border-box;
 }
 
 .children-side-illustration {
-  width: 200px;
-  height: 200px;
-  margin: 0 auto 24px;
+  width: 260px;
+  height: 260px;
+  max-width: 100%;
+  margin: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -70,9 +85,13 @@ $children-layout-gap: 44px;
 
 .children-side-text {
   color: $text-bg;
-  font-weight: 800;
-  font-size: 2rem;
-  padding: 0 15px;
+  font-weight: 900;
+  font-size: 2.55rem;
+  line-height: 0.95;
+  max-width: 286px;
+  margin: 0;
+  padding: 0;
+  overflow-wrap: break-word;
 }
 
 .children-side-greeting {

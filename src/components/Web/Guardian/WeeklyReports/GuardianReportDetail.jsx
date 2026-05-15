@@ -77,6 +77,7 @@ const GuardianReportDetail = () => {
     payload?.title ??
     payload?.week_label ??
     payload?.name ??
+    (payload?.report_type === "WEEKLY" ? "Báo cáo tuần" : null) ??
     `Báo cáo #${reportId}`;
 
   const bodyText = useMemo(() => pickMarkdownString(payload), [payload]);

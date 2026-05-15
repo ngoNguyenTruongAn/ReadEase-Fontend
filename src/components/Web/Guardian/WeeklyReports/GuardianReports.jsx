@@ -26,14 +26,28 @@ const childRowId = (row) =>
 
 const reportRowId = (row) => row?.id ?? row?.report_id ?? row?._id;
 
+const formatDate = (input) => {
+  if (!input) return "—";
+  const d = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(d.getTime())) return String(input);
+  return new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(d);
+};
+
 const reportTitle = (row) =>
   row?.title ??
   row?.week_label ??
   row?.name ??
+  (row?.report_type === "WEEKLY" ? "Báo cáo tuần" : null) ??
   (reportRowId(row) != null ? `Báo cáo #${reportRowId(row)}` : "Báo cáo");
 
 const reportSubtitle = (row) =>
-  row?.summary ?? row?.description ?? row?.status ?? row?.sub ?? "";
+  row?.period_start || row?.period_end
+    ? `Kỳ: ${formatDate(row?.period_start)} — ${formatDate(row?.period_end)}`
+    : row?.summary ?? row?.description ?? row?.status ?? row?.sub ?? "";
 
 const GuardianReports = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -214,8 +228,7 @@ const GuardianReports = () => {
               <div className="gwr-muted">Đang tải báo cáo...</div>
             ) : reports.length === 0 ? (
               <div className="gwr-muted">
-                Chưa có báo cáo nào cho trẻ này. Bạn có thể thử nút &quot;Tạo
-                báo cáo tuần&quot; nếu dịch vụ đã bật.
+                Chưa có báo cáo nào cho trẻ này.
               </div>
             ) : (
               <ul className="gwr-list">

@@ -19,6 +19,7 @@
   font-weight: 950;
   color: $text-main;
   line-height: 1.1;
+  padding-left: 12px;
 }
 
 .clr-subtitle {
@@ -259,6 +260,32 @@
   font-size: 1.1rem;
   font-weight: 950;
   color: $text-main;
+}
+
+.clr-modal__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.clr-modal__approve {
+  border: none;
+  background: $primary-color;
+  color: #ffffff;
+  font-weight: 900;
+  padding: 8px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    filter: brightness(0.96);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
 }
 
 .clr-modal__close {

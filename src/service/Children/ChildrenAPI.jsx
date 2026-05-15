@@ -69,6 +69,16 @@ const getCollection = async (childId) => {
   }
 };
 
+const getGuardians = async () => {
+  try {
+    const response = await instance.get("guardian/my-guardians");
+    return response.data;
+  } catch (error) {
+    console.error("Error getting guardians:", error);
+    throw error;
+  }
+};
+
 export default {
   getBalance,
   getConsumptionHistory,
@@ -76,4 +86,5 @@ export default {
   redeemReward,
   getInviteCode,
   getCollection,
+  getGuardians,
 };

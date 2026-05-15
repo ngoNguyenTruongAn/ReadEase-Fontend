@@ -26,6 +26,27 @@ const normalizeReportDetail = (res) => {
   return null;
 };
 
+const reportRowId = (row) => row?.id ?? row?.report_id ?? row?._id;
+
+const isApprovedReport = (row) => {
+  if (!row) return false;
+  if (
+    row.approved === true ||
+    row.is_approved === true ||
+    row.visible_to_guardian === true
+  ) {
+    return true;
+  }
+
+  const status = String(
+    row.approval_status ?? row.review_status ?? row.status ?? "",
+  ).toLowerCase();
+
+  return ["approved", "published", "visible", "reviewed", "da_duyet"].some(
+    (token) => status.includes(token),
+  );
+};
+
 const formatDate = (input) => {
   if (!input) return "—";
   const d = input instanceof Date ? input : new Date(input);
@@ -70,6 +91,8 @@ const Reports = () => {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detail, setDetail] = useState(null);
+  const [detailReportId, setDetailReportId] = useState("");
+  const [approvingReportId, setApprovingReportId] = useState("");
 
   const fetchChildren = useCallback(async () => {
     setLoadingChildren(true);
@@ -145,6 +168,7 @@ const Reports = () => {
     setDetailOpen(true);
     setDetailLoading(true);
     setDetail(null);
+    setDetailReportId(String(reportId));
     try {
       const res = await GuardianAPI.getReportById(reportId);
       setDetail(normalizeReportDetail(res));
@@ -153,6 +177,7 @@ const Reports = () => {
         humanizeApiError(err, "Không tải được chi tiết báo cáo."),
       );
       setDetailOpen(false);
+      setDetailReportId("");
     } finally {
       setDetailLoading(false);
     }
@@ -161,6 +186,71 @@ const Reports = () => {
   const closeDetail = () => {
     setDetailOpen(false);
     setDetail(null);
+    setDetailReportId("");
+  };
+
+  const detailIsApproved = useMemo(() => {
+    const row = reports.find(
+      (r) => String(reportRowId(r)) === String(detailReportId),
+    );
+    return isApprovedReport(detail) || isApprovedReport(row);
+  }, [detail, detailReportId, reports]);
+
+  const detailIsApproving =
+    approvingReportId && String(approvingReportId) === String(detailReportId);
+
+  const persistApprovedReport = (reportId, apiPayload = null) => {
+    const row = reports.find((r) => String(reportRowId(r)) === String(reportId));
+    const approvedAt = new Date().toISOString();
+    const approvedReport = {
+      ...row,
+      ...detail,
+      ...(apiPayload || {}),
+      id: reportRowId(apiPayload) ?? reportRowId(detail) ?? reportRowId(row) ?? reportId,
+      child_id:
+        apiPayload?.child_id ??
+        apiPayload?.childId ??
+        detail?.child_id ??
+        detail?.childId ??
+        row?.child_id ??
+        row?.childId ??
+        selectedChildId,
+      approved: true,
+      is_approved: true,
+      visible_to_guardian: true,
+      approval_status: "APPROVED",
+      status: "APPROVED",
+      approved_at: apiPayload?.approved_at ?? detail?.approved_at ?? approvedAt,
+    };
+
+    setDetail(approvedReport);
+    setReports((prev) =>
+      prev.map((r) =>
+        String(reportRowId(r)) === String(reportId)
+          ? { ...r, ...approvedReport, content: r.content ?? approvedReport.content }
+          : r,
+      ),
+    );
+
+    return approvedReport;
+  };
+
+  const handleApproveDetail = async () => {
+    const reportId = detailReportId || reportRowId(detail);
+    if (!reportId || detailIsApproving) return;
+
+    setApprovingReportId(String(reportId));
+    try {
+      const res = await GuardianAPI.approveReport(reportId, selectedChildId);
+      const apiPayload = normalizeReportDetail(res);
+      persistApprovedReport(reportId, apiPayload);
+      toast.success("Đã duyệt báo cáo. Phụ huynh có thể xem trong Báo cáo tuần.");
+      if (selectedChildId) await fetchReports(selectedChildId);
+    } catch (err) {
+      toast.error(humanizeApiError(err, "Duyệt báo cáo thất bại."));
+    } finally {
+      setApprovingReportId("");
+    }
   };
 
   return (
@@ -168,10 +258,6 @@ const Reports = () => {
       <div className="clr-header">
         <div>
           <div className="clr-title">Báo cáo</div>
-          <div className="clr-subtitle">
-            Chọn trẻ, xem báo cáo đọc tuần đã tạo, tạo báo cáo mới hoặc mở chi
-            tiết (nội dung Markdown từ AI).
-          </div>
         </div>
         <button
           type="button"
@@ -190,7 +276,6 @@ const Reports = () => {
           <div className="clr-hint">Đang tải danh sách trẻ...</div>
         ) : (
           <label className="clr-field">
-            <span className="clr-field__label">Trẻ</span>
             <select
               className="clr-field__select"
               value={selectedChildId}
@@ -259,10 +344,12 @@ const Reports = () => {
                     {r.created_at ? (
                       <> · Tạo lúc {formatDateTime(r.created_at)}</>
                     ) : null}
-                    {r.ai_model ? <> · {r.ai_model}</> : null}
                   </div>
                 </div>
                 <div className="clr-item__right">
+                  {isApprovedReport(r) ? (
+                    <div className="clr-item__status">Đã duyệt</div>
+                  ) : null}
                   <button
                     className="clr-item__link"
                     type="button"
@@ -294,13 +381,27 @@ const Reports = () => {
               <h2 id="clr-detail-title" className="clr-modal__title">
                 Chi tiết báo cáo
               </h2>
-              <button
-                type="button"
-                className="clr-modal__close"
-                onClick={closeDetail}
-              >
-                Đóng
-              </button>
+              <div className="clr-modal__actions">
+                <button
+                  type="button"
+                  className="clr-modal__approve"
+                  onClick={handleApproveDetail}
+                  disabled={detailLoading || detailIsApproved || detailIsApproving}
+                >
+                  {detailIsApproved
+                    ? "Đã duyệt"
+                    : detailIsApproving
+                      ? "Đang duyệt..."
+                      : "Duyệt"}
+                </button>
+                <button
+                  type="button"
+                  className="clr-modal__close"
+                  onClick={closeDetail}
+                >
+                  Đóng
+                </button>
+              </div>
             </div>
             {detailLoading ? (
               <div className="clr-hint">Đang tải...</div>
@@ -314,7 +415,6 @@ const Reports = () => {
                   {detail.created_at ? (
                     <span>Tạo: {formatDateTime(detail.created_at)}</span>
                   ) : null}
-                  {detail.ai_model ? <span>Model: {detail.ai_model}</span> : null}
                 </div>
                 {detail.ai_disclaimer ? (
                   <div className="clr-disclaimer">{detail.ai_disclaimer}</div>
