@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate, useOutletContext } from "react-router-dom";
-import { saveSelectedStory } from "../Reading/readingUtils";
+import { useOutletContext } from "react-router-dom";
 import ClinicianAPI from "../../../../service/Clinician/ClinicianAPI";
+import redMonster from "../../../../assets/image/reading book and sitting on the grass 1.png";
 import "./LibararyPage.scss";
 
 const normalizeList = (res) => {
@@ -14,12 +14,12 @@ const normalizeList = (res) => {
 };
 
 const LibararyPage = () => {
-  const navigate = useNavigate();
-  const { setSideStory } = useOutletContext() ?? {};
+  const { setSideStory, resetSideStory } = useOutletContext() ?? {};
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [items, setItems] = useState([]);
+  const [selectedStoryId, setSelectedStoryId] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -55,28 +55,27 @@ const LibararyPage = () => {
     }));
   }, [items]);
 
-  const handleClickStory = (story) => {
-    const selectedStory = {
-      id: story.id,
-      title: story.title,
-      coverUrl: story.coverUrl,
-      description:
-        story.description ||
-        "Ngày xưa, ở một làng nọ, có một anh nông phu nghèo.",
-    };
+  const storyDescription = (story) => story.description?.trim() ?? "";
 
-    setSideStory?.({
-      kind: "story",
-      src: story.coverUrl,
-      alt: story.title,
-      title: story.title,
-      description:
-        "“Ngày xưa, ở một làng nọ, có một anh nông phu nghèo...Ngày xưa, ở một làng nọ, có một anh nông phu nghèo...Ngày xưa, ở một làng nọ, có một anh nông phu nghèo...Ngày xưa, ở một làng nọ, có một anh nông phu nghèo...”",
-    });
+  const sideStoryFromLibraryItem = (story) => ({
+    kind: "story",
+    src: story.coverUrl?.trim() ? story.coverUrl : redMonster,
+    alt: story.title,
+    title: story.title,
+    description: storyDescription(story),
+    storyId: story.id,
+    coverUrl: story.coverUrl ?? "",
+  });
 
-    saveSelectedStory(selectedStory);
-    navigate("/children/calibration/start", {
-      state: { story: selectedStory },
+  const handleSelectStory = (story) => {
+    setSelectedStoryId((prev) => {
+      const next = prev === story.id ? null : story.id;
+      if (next === null) {
+        resetSideStory?.();
+      } else {
+        setSideStory?.(sideStoryFromLibraryItem(story));
+      }
+      return next;
     });
   };
 
@@ -85,23 +84,35 @@ const LibararyPage = () => {
       {error ? <div className="library-error">{error}</div> : null}
       {loading ? <div className="library-loading">Đang tải...</div> : null}
       <div className="library-grid">
-        {stories.map((story) => (
-          <button
-            key={story.id}
-            type="button"
-            className="library-card"
-            onClick={() => handleClickStory(story)}
-          >
+        {stories.map((story) => {
+          const isSelected = selectedStoryId === story.id;
+          return (
             <div
-              className="library-card-cover"
-              style={
-                story.coverUrl
-                  ? { backgroundImage: `url(${story.coverUrl})` }
-                  : {}
-              }
-            />
-          </button>
-        ))}
+              key={story.id}
+              role="button"
+              tabIndex={0}
+              className={`library-card${isSelected ? " library-card--selected" : ""}`}
+              onClick={() => handleSelectStory(story)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleSelectStory(story);
+                }
+              }}
+            >
+              <div className="library-card-cover-wrap">
+                <div
+                  className="library-card-cover"
+                  style={
+                    story.coverUrl
+                      ? { backgroundImage: `url(${story.coverUrl})` }
+                      : {}
+                  }
+                />
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

@@ -81,11 +81,20 @@
   }
 }
 
+.library-card-cover-wrap {
+  position: relative;
+  width: 100%;
+}
+
 .library-card-cover {
   width: 100%;
   aspect-ratio: 3 / 4;
   background-size: cover;
   background-position: center;
+}
+
+.library-card--selected .library-card-cover {
+  box-shadow: inset 0 0 0 2px rgba($primary-color, 0.45);
 }
 
 .library-card-body {

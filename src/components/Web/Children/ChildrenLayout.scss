@@ -442,9 +442,14 @@ $children-layout-gap: 44px;
   cursor: pointer;
   transition: 0.2s;
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: color.adjust($primary-color, $lightness: -6%);
     transform: translateY(-1px);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
   }
 }
 
