@@ -7,6 +7,7 @@ import monsterStore from "../../../assets/image/MonterStore.png";
 import AuthAPI from "../../../service/Auth/AuthAPI";
 import { toast } from "react-toastify";
 import ChildrenAPI from "../../../service/Children/ChildrenAPI";
+import { saveSelectedStory } from "./Reading/readingUtils";
 
 const ChildrenLayout = () => {
   const defaultSideStory = useMemo(
@@ -97,6 +98,24 @@ const ChildrenLayout = () => {
       cancelled = true;
     };
   }, [childId]);
+  const handleLibraryReadNow = () => {
+    if (sideStory?.kind !== "story") return;
+    const id = sideStory.storyId;
+    if (id == null || id === "") return;
+    const selectedStory = {
+      id,
+      title: sideStory.title ?? "—",
+      coverUrl: sideStory.coverUrl ?? "",
+      description:
+        String(sideStory.description ?? "").trim() ||
+        "Ngày xưa, ở một làng nọ, có một anh nông phu nghèo.",
+    };
+    saveSelectedStory(selectedStory);
+    navigate("/children/calibration/start", {
+      state: { story: selectedStory },
+    });
+  };
+
   const validateOldPassword = (raw) => {
     const v = String(raw ?? "");
     if (!v.trim()) return "Vui lòng nhập mật khẩu hiện tại.";
@@ -384,24 +403,55 @@ const ChildrenLayout = () => {
         <aside className="children-side">
           <div className="children-side-hero">
             {showStoreSidebar ? (
-              <>
-                <div className="children-side-illustration">
-                  <img
-                    src={monsterStore}
-                    alt="Cửa hàng"
-                    className="children-side-illustration-img"
-                  />
-                </div>
+              sideStory?.kind === "storeReward" ? (
+                <div className="children-side-story children-side-store-reward">
+                  <div className="children-side-story-cover">
+                    <img
+                      src={sideStory.src}
+                      alt={sideStory.alt}
+                      className="children-side-story-cover-img"
+                    />
+                  </div>
 
-                <div className="children-side-store">
-                  <p className="children-side-text children-side-store-title">
-                    Cửa hàng nhân vật
-                  </p>
-                  <p className="children-side-store-subtitle">
-                    Chọn nhóm bạn muốn xem
-                  </p>
+                  <h3 className="children-side-story-title">{sideStory.title}</h3>
+
+                  <div className="children-side-story-tags">
+                    <span className="children-side-story-tag">
+                      {sideStory.cost} xu
+                    </span>
+                    {typeof sideStory.stock === "number" ? (
+                      <span className="children-side-story-tag">
+                        Còn: {sideStory.stock}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {sideStory.description ? (
+                    <p className="children-side-story-desc">
+                      {sideStory.description}
+                    </p>
+                  ) : null}
                 </div>
-              </>
+              ) : (
+                <>
+                  <div className="children-side-illustration">
+                    <img
+                      src={monsterStore}
+                      alt="Cửa hàng"
+                      className="children-side-illustration-img"
+                    />
+                  </div>
+
+                  <div className="children-side-store">
+                    <p className="children-side-text children-side-store-title">
+                      Cửa hàng nhân vật
+                    </p>
+                    <p className="children-side-store-subtitle">
+                      Chọn nhóm bạn muốn xem
+                    </p>
+                  </div>
+                </>
+              )
             ) : (
               <>
                 {isProfileRoute ? (
@@ -495,7 +545,14 @@ const ChildrenLayout = () => {
                       {sideStory.description}
                     </p>
 
-                    <button type="button" className="children-side-story-cta">
+                    <button
+                      type="button"
+                      className="children-side-story-cta"
+                      disabled={
+                        sideStory.storyId == null || sideStory.storyId === ""
+                      }
+                      onClick={handleLibraryReadNow}
+                    >
                       Đọc ngay
                     </button>
                   </div>

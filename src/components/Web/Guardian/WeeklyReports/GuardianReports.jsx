@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { toast } from "react-toastify";
 import GuardianAPI from "../../../../service/Guardian/GuardianAPI";
 import { humanizeApiError } from "../../../../service/instance";
 import "./GuardianReports.scss";
@@ -34,11 +33,7 @@ const reportTitle = (row) =>
   (reportRowId(row) != null ? `Báo cáo #${reportRowId(row)}` : "Báo cáo");
 
 const reportSubtitle = (row) =>
-  row?.summary ??
-  row?.description ??
-  row?.status ??
-  row?.sub ??
-  "";
+  row?.summary ?? row?.description ?? row?.status ?? row?.sub ?? "";
 
 const GuardianReports = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -53,8 +48,6 @@ const GuardianReports = () => {
   const [loadingReports, setLoadingReports] = useState(false);
   const [reports, setReports] = useState([]);
   const [reportsError, setReportsError] = useState("");
-
-  const [generating, setGenerating] = useState(false);
 
   const fetchChildren = useCallback(async () => {
     setLoadingChildren(true);
@@ -129,10 +122,7 @@ const GuardianReports = () => {
   };
 
   const childLabel = (row) =>
-    row?.display_name?.trim() ||
-    row?.email?.trim() ||
-    childRowId(row) ||
-    "Trẻ";
+    row?.display_name?.trim() || row?.email?.trim() || childRowId(row) || "Trẻ";
 
   const formatDateTime = (input) => {
     if (!input) return "—";
@@ -146,26 +136,6 @@ const GuardianReports = () => {
       minute: "2-digit",
       hour12: false,
     }).format(d);
-  };
-
-  const handleGenerate = async () => {
-    if (!selectedChildId || generating) return;
-    setGenerating(true);
-    try {
-      const res = await GuardianAPI.createWeeklyReport(selectedChildId);
-      toast.success(
-        typeof res?.message === "string"
-          ? res.message
-          : "Đã tạo báo cáo tuần. Danh sách sẽ được làm mới.",
-      );
-      await fetchReports(selectedChildId);
-    } catch (err) {
-      toast.error(
-        humanizeApiError(err, "Tạo báo cáo thất bại. Vui lòng thử lại."),
-      );
-    } finally {
-      setGenerating(false);
-    }
   };
 
   return (
@@ -231,17 +201,6 @@ const GuardianReports = () => {
             </div>
           </div>
 
-          <div className="gwr-toolbar">
-            <button
-              type="button"
-              className="gwr-primary"
-              onClick={handleGenerate}
-              disabled={!selectedChildId || generating}
-            >
-              {generating ? "Đang tạo báo cáo..." : "Tạo báo cáo tuần"}
-            </button>
-          </div>
-
           <div className="gwr-card">
             <div className="gwr-card__title">Danh sách báo cáo</div>
 
@@ -270,7 +229,9 @@ const GuardianReports = () => {
                   return (
                     <li key={key} className="gwr-item">
                       <div className="gwr-item__main">
-                        <div className="gwr-item__title">{reportTitle(row)}</div>
+                        <div className="gwr-item__title">
+                          {reportTitle(row)}
+                        </div>
                         {reportSubtitle(row) ? (
                           <div className="gwr-item__sub">
                             {reportSubtitle(row)}

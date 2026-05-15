@@ -3,6 +3,7 @@ import "./StorePage.scss";
 import { useOutletContext } from "react-router-dom";
 import ChildrenAPI from "../../../../service/Children/ChildrenAPI";
 import AuthAPI from "../../../../service/Auth/AuthAPI";
+import monsterStore from "../../../../assets/image/MonterStore.png";
 
 const TINTS = ["mint", "lavender", "peach", "coral", "sky"];
 
@@ -10,6 +11,8 @@ const StorePage = () => {
   const outletContext = useOutletContext();
   const activeFilter = outletContext?.storeFilter ?? "all";
   const contextChildId = String(outletContext?.childId ?? "").trim();
+  const setSideStory = outletContext?.setSideStory;
+  const resetSideStory = outletContext?.resetSideStory;
   // Dùng balance + setBalance từ ChildrenLayout để header tự cập nhật
   const balance = outletContext?.balance ?? null;
   const parentSetBalance = outletContext?.setBalance;
@@ -96,8 +99,39 @@ const StorePage = () => {
   // Không cần fetch lại ở đây
 
   useEffect(() => {
-    if (!selectedId && rewards.length > 0) setSelectedId(rewards[0]?.id || "");
-  }, [rewards, selectedId]);
+    if (!setSideStory) return;
+    if (!rewards.length) {
+      resetSideStory?.();
+      return;
+    }
+    if (!selectedId) {
+      const firstId = rewards[0]?.id ?? "";
+      if (firstId !== "") setSelectedId(firstId);
+    }
+    const effectiveId = selectedId || rewards[0]?.id || "";
+    const item = rewards.find((r) => r?.id === effectiveId);
+    if (!item) {
+      resetSideStory?.();
+      return;
+    }
+    const img = String(item.image_url ?? "").trim();
+    setSideStory({
+      kind: "storeReward",
+      src: img || monsterStore,
+      alt: item.name || "Phần thưởng",
+      title: item.name || "—",
+      description: String(item.description ?? "").trim(),
+      cost: item.cost ?? 0,
+      stock: item.stock,
+      rewardId: item.id,
+    });
+  }, [rewards, selectedId, setSideStory, resetSideStory]);
+
+  useEffect(() => {
+    return () => {
+      resetSideStory?.();
+    };
+  }, [resetSideStory]);
 
   const visible = useMemo(() => {
     if (!Array.isArray(rewards)) return [];
