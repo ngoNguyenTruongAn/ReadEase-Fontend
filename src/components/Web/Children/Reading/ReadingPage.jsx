@@ -1158,7 +1158,8 @@ const ReadingPage = () => {
           </>
         ) : null}
 
-        {shouldShowDebugPanel && (
+        {/* Debug Panel (for Dev mode) */}
+        {/* {shouldShowDebugPanel && (
           <aside className={`reading-tracking-debug ${isDebugPanelExpanded ? "is-expanded" : ""}`}>
             <button
               type="button"
@@ -1226,7 +1227,7 @@ const ReadingPage = () => {
               </div>
             )}
           </aside>
-        )}
+        )} */}
       </div>
 
       <ReadingCompletionModal
