@@ -104,7 +104,6 @@ const LOCAL_FALLBACK_ERRATIC_MIN_DIRECTION_CHANGES = 4;
 const LOCAL_FALLBACK_ERRATIC_MAX_PATH_EFFICIENCY = 0.48;
 const LOCAL_FALLBACK_ERRATIC_MIN_MEAN_SPEED_PX_MS = 0.22;
 const LOCAL_FALLBACK_ERRATIC_MIN_PEAK_SPEED_PX_MS = 0.55;
-const LOCAL_FALLBACK_ERRATIC_MAX_BACKTRACK_STEPS = 1;
 const LOCAL_FALLBACK_ERRATIC_MAX_ORDERED_FORWARD_RATIO = 0.62;
 // DEV_TEST_MODE: hạ threshold để dễ trigger REGRESSION khi test thủ công,
 // nhưng vẫn đủ cao để không bắt zigzag tự nhiên khi di chuột đọc bình thường.
@@ -1438,10 +1437,7 @@ const useReadingDualInterventionSession = ({
           summary.peakSpeed >= LOCAL_FALLBACK_ERRATIC_MIN_PEAK_SPEED_PX_MS);
       const isLikelyReadingOrder =
         summary.orderedForwardRatio > LOCAL_FALLBACK_ERRATIC_MAX_ORDERED_FORWARD_RATIO;
-      const isLikelyIntentionalRegression =
-        summary.backtrackSteps > LOCAL_FALLBACK_ERRATIC_MAX_BACKTRACK_STEPS;
-
-      if (!hasErraticPointerPath || isLikelyReadingOrder || isLikelyIntentionalRegression) {
+      if (!hasErraticPointerPath || isLikelyReadingOrder) {
         return false;
       }
 
@@ -2124,15 +2120,24 @@ const useReadingDualInterventionSession = ({
 
     const timestamp = Date.now();
 
-    evaluateRegressionFallbackByWordIndex({
+    const didTriggerErraticDistraction = evaluateErraticDistractionFallbackByPointer({
       wordIndex: resolvedWordIndex,
+      x: event.clientX,
+      y: event.clientY,
       timestamp,
-      wordElement,
-      wordLayout,
-      pointerX: event.clientX,
-      pointerY: event.clientY,
-      previousPointer,
     });
+
+    if (!didTriggerErraticDistraction) {
+      evaluateRegressionFallbackByWordIndex({
+        wordIndex: resolvedWordIndex,
+        timestamp,
+        wordElement,
+        wordLayout,
+        pointerX: event.clientX,
+        pointerY: event.clientY,
+        previousPointer,
+      });
+    }
 
     evaluateDwellFallbackByPointer({
       wordIndex: resolvedWordIndex,
@@ -2140,13 +2145,6 @@ const useReadingDualInterventionSession = ({
       y: event.clientY,
       timestamp,
       shouldTrigger: false,
-    });
-
-    evaluateErraticDistractionFallbackByPointer({
-      wordIndex: resolvedWordIndex,
-      x: event.clientX,
-      y: event.clientY,
-      timestamp,
     });
 
     flushPendingAdaptationIfReady({ timestamp });
