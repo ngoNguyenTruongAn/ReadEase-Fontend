@@ -1,0 +1,488 @@
+@use "../../../../styles/variables" as *;
+
+.gst {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 38px;
+}
+
+.gst-card {
+  position: relative;
+  width: 100%;
+  border-radius: 18px;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow:
+    0 18px 36px rgba(15, 23, 42, 0.08),
+    0 0 0 1px rgba(255, 255, 255, 0.86) inset;
+}
+
+.gst-card__body {
+  padding: 54px 42px;
+}
+
+.gst-coppa {
+  min-height: 256px;
+}
+
+.gst-coppa__status {
+  position: absolute;
+  top: 26px;
+  right: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 64px);
+  padding: 9px 16px;
+  border-radius: 10px;
+  border: 1.5px solid rgba(39, 174, 96, 0.8);
+  background: rgba(230, 250, 228, 0.95);
+  color: #2ca845;
+  font-weight: 900;
+  font-size: 1rem;
+  line-height: 1.2;
+
+  svg {
+    width: 24px;
+    height: 24px;
+    flex: 0 0 auto;
+  }
+
+  span {
+    overflow-wrap: anywhere;
+  }
+}
+
+.gst-title {
+  margin: 0 0 24px;
+  color: $text-main;
+  font-size: 1.95rem;
+  font-weight: 950;
+  line-height: 1.15;
+}
+
+.gst-title--danger {
+  color: #d3343d;
+}
+
+.gst-copy {
+  max-width: 790px;
+  margin: 0;
+  color: $text-main;
+  font-size: 1.1rem;
+  font-weight: 500;
+  line-height: 1.72;
+}
+
+.gst-delete-flow {
+  margin-top: 34px;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.gst-field {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gst-field__label {
+  color: $text-main;
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.gst-field__control {
+  width: 100%;
+  min-height: 52px;
+  box-sizing: border-box;
+  border: 1.5px solid rgba(15, 23, 42, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  color: $text-main;
+  font-size: 1.02rem;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 0 16px;
+  outline: none;
+
+  &:focus {
+    border-color: rgba($primary-color, 0.72);
+    box-shadow: 0 0 0 4px rgba($primary-color, 0.14);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    color: rgba(15, 23, 42, 0.48);
+    background: rgba(248, 250, 252, 0.8);
+  }
+}
+
+.gst-field__control--otp {
+  max-width: 240px;
+  letter-spacing: 0;
+}
+
+.gst-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #a04300;
+  font-size: 0.98rem;
+  font-weight: 800;
+  line-height: 1.35;
+
+  svg {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+  }
+}
+
+.gst-secondary {
+  min-height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 14px 24px;
+  border: 1.5px solid rgba($primary-color, 0.38);
+  border-radius: 12px;
+  background: #ffffff;
+  color: $primary-color;
+  font-size: 1.02rem;
+  font-weight: 950;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+
+  svg {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 auto;
+  }
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    border-color: rgba($primary-color, 0.68);
+    background: rgba(255, 255, 255, 0.9);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.56;
+    box-shadow: none;
+  }
+}
+
+.gst-otp {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.gst-otp__hint {
+  margin: 0;
+  color: $text-main;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.gst-danger {
+  min-height: 330px;
+  border: 1.5px solid rgba(255, 80, 96, 0.68);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(255, 245, 247, 0.82)),
+    #ffffff;
+}
+
+.gst-delete {
+  min-height: 68px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 16px 36px;
+  border: none;
+  border-radius: 14px;
+  background: #f7313f;
+  color: #ffffff;
+  font-size: 1.18rem;
+  font-weight: 950;
+  cursor: pointer;
+  box-shadow: 0 12px 24px rgba(247, 49, 63, 0.24);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+
+  svg {
+    width: 28px;
+    height: 28px;
+    flex: 0 0 auto;
+  }
+
+  &:hover {
+    transform: translateY(-1px);
+    background: #ec2635;
+    box-shadow: 0 16px 28px rgba(247, 49, 63, 0.3);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    transform: none;
+    background: #f59aa1;
+    box-shadow: none;
+  }
+}
+
+.gst-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(3px);
+  box-sizing: border-box;
+}
+
+.gst-modal {
+  width: min(600px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  border-radius: 20px;
+  background: #ffffff;
+  padding: 34px 44px 38px;
+  color: $text-main;
+  box-shadow:
+    0 24px 60px rgba(15, 23, 42, 0.22),
+    0 0 0 1px rgba(255, 255, 255, 0.82) inset;
+}
+
+.gst-modal__icon {
+  width: 68px;
+  height: 68px;
+  margin: 0 auto 18px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(247, 49, 63, 0.12);
+  color: #f7313f;
+
+  svg {
+    width: 30px;
+    height: 30px;
+  }
+}
+
+.gst-modal__title {
+  margin: 0 0 16px;
+  color: $text-main;
+  font-size: 1.48rem;
+  font-weight: 950;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.gst-modal__copy {
+  max-width: 470px;
+  margin: 0 auto 24px;
+  color: $text-main;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.58;
+  text-align: center;
+}
+
+.gst-modal__field {
+  margin-bottom: 16px;
+}
+
+.gst-modal__field .gst-field__control--otp {
+  max-width: none;
+}
+
+.gst-modal__notice {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(255, 247, 229, 0.95);
+  color: #8a5a00;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.35;
+
+  svg {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+  }
+}
+
+.gst-modal__resend {
+  margin: 12px 0 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: $primary-color;
+  font-size: 0.96rem;
+  font-weight: 900;
+  line-height: 1.4;
+  cursor: pointer;
+
+  &:disabled {
+    cursor: not-allowed;
+    color: rgba(15, 23, 42, 0.42);
+  }
+}
+
+.gst-modal__actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  gap: 18px;
+  margin-top: 22px;
+}
+
+.gst-modal__cancel,
+.gst-modal__confirm {
+  min-height: 56px;
+  border-radius: 12px;
+  font-size: 1.08rem;
+  font-weight: 900;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    transform: none;
+  }
+}
+
+.gst-modal__cancel {
+  border: 1.5px solid rgba(15, 23, 42, 0.12);
+  background: #f8fafc;
+  color: $text-main;
+  box-shadow: 0 10px 18px rgba(15, 23, 42, 0.08);
+
+  &:disabled {
+    opacity: 0.62;
+  }
+}
+
+.gst-modal__confirm {
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: #f7313f;
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(247, 49, 63, 0.24);
+
+  svg {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+  }
+
+  &:hover:not(:disabled) {
+    background: #ec2635;
+    box-shadow: 0 16px 28px rgba(247, 49, 63, 0.3);
+  }
+
+  &:disabled {
+    background: #f7b8bd;
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .gst {
+    gap: 22px;
+  }
+
+  .gst-card__body {
+    padding: 36px 24px;
+  }
+
+  .gst-coppa__status {
+    position: static;
+    margin: 20px 20px 0;
+    max-width: none;
+  }
+
+  .gst-title {
+    font-size: 1.55rem;
+  }
+
+  .gst-copy {
+    font-size: 1rem;
+  }
+
+  .gst-delete-flow {
+    max-width: none;
+  }
+
+  .gst-secondary {
+    width: 100%;
+  }
+
+  .gst-field__control--otp {
+    max-width: none;
+  }
+
+  .gst-delete {
+    width: 100%;
+    min-height: 58px;
+    padding: 14px 18px;
+    font-size: 1rem;
+  }
+
+  .gst-modal {
+    padding: 30px 20px 24px;
+  }
+
+  .gst-modal__actions {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}

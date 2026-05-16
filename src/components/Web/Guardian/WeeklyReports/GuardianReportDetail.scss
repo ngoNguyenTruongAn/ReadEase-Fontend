@@ -9,104 +9,115 @@ $navy: #1a2b4a;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  padding: 0 clamp(16px, 4vw, 40px);
+  align-items: stretch;
+  gap: 22px;
+  padding: 0;
+  color: #102945;
 }
 
 .gwrd-top {
   display: flex;
   align-items: center;
   width: 100%;
-  max-width: 880px;
-  margin: 0 auto;
   box-sizing: border-box;
 }
 
 .gwrd-back {
   display: inline-flex;
   align-items: center;
-  font-weight: 900;
+  min-height: 42px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 2px solid rgba($primary-color, 0.28);
+  background: rgba(255, 255, 255, 0.9);
   color: $primary-color;
+  font-weight: 900;
   text-decoration: none;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
 
   &:hover {
-    text-decoration: underline;
+    transform: translateY(-1px);
+    border-color: rgba($primary-color, 0.58);
+    background: #ffffff;
   }
 }
 
 .gwrd-muted {
-  color: $text-secondary;
-  font-weight: 650;
   width: 100%;
-  max-width: 880px;
-  margin: 0 auto;
-  text-align: center;
   box-sizing: border-box;
+  padding: 18px 16px;
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.78);
+  color: $text-secondary;
+  font-size: 0.95rem;
+  font-weight: 650;
+  line-height: 1.4;
 }
 
 .gwrd-alert {
+  width: 100%;
+  max-height: 180px;
+  box-sizing: border-box;
+  overflow: auto;
   padding: 12px 14px;
   border-radius: 12px;
   background: rgba(220, 38, 38, 0.08);
   color: #b42318;
+  font-size: 0.92rem;
   font-weight: 700;
-  width: 100%;
-  max-width: 880px;
-  margin: 0 auto;
-  box-sizing: border-box;
-  text-align: center;
+  line-height: 1.4;
 }
 
-/* Trang báo cáo — căn giữa theo chiều ngang, cột nội dung cố định */
 .gwrd-sheet {
   width: 100%;
-  max-width: 880px;
-  margin: 0 auto;
   box-sizing: border-box;
-  background: linear-gradient(180deg, #fffdf8 0%, #fff8ef 100%);
-  border-radius: 22px;
-  border: 1px solid rgba($navy, 0.08);
-  box-shadow: 0 12px 40px rgba(26, 43, 74, 0.08);
   overflow: hidden;
+  border: 1px solid rgba($navy, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow:
+    0 14px 28px rgba(15, 23, 42, 0.07),
+    0 0 0 1px rgba(255, 255, 255, 0.84) inset;
 }
 
 .gwrd-hero {
-  padding: 22px clamp(20px, 4vw, 36px) 18px;
+  padding: 24px 28px 20px;
   border-bottom: 1px solid rgba($navy, 0.08);
-  background: rgba(255, 255, 255, 0.65);
-  text-align: center;
+  background: rgba(248, 250, 252, 0.52);
+  text-align: left;
 }
 
 .gwrd-title {
-  margin: 0 auto;
-  max-width: 42rem;
-  font-size: 1.45rem;
+  max-width: 48rem;
+  margin: 0;
+  color: #102945;
+  font-size: 1.55rem;
   font-weight: 950;
-  color: $navy;
   line-height: 1.25;
+  letter-spacing: 0;
   overflow-wrap: anywhere;
-  letter-spacing: -0.02em;
 }
 
 .gwrd-meta {
-  margin: 10px auto 0;
-  max-width: 42rem;
-  font-size: 0.88rem;
-  font-weight: 700;
+  max-width: 48rem;
+  margin: 10px 0 0;
   color: rgba($navy, 0.5);
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 
-/* Vùng Markdown — padding đều hai bên */
 .gwrd-prose {
-  padding: 22px clamp(20px, 4vw, 36px) 32px;
-  color: $navy;
-  font-size: 0.98rem;
-  line-height: 1.6;
-  font-weight: 600;
-  max-width: 42rem;
-  margin: 0 auto;
+  max-width: 52rem;
   box-sizing: border-box;
+  margin: 0;
+  padding: 26px 28px 32px;
+  color: #102945;
+  font-size: 0.98rem;
+  font-weight: 600;
+  line-height: 1.6;
 
   > *:first-child {
     margin-top: 0;
@@ -119,26 +130,26 @@ $navy: #1a2b4a;
 
 .gwrd-md-h1 {
   margin: 1.25rem 0 0.75rem;
+  color: #102945;
   font-size: 1.2rem;
   font-weight: 950;
-  color: $navy;
-  letter-spacing: -0.02em;
   line-height: 1.3;
+  letter-spacing: 0;
 }
 
 .gwrd-md-h2 {
-  margin: 1.75rem 0 0.85rem;
-  padding: 10px 0 8px;
-  font-size: 1.12rem;
-  font-weight: 950;
-  color: $navy;
-  letter-spacing: -0.015em;
-  line-height: 1.35;
-  border-bottom: 2px solid rgba($primary-color, 0.35);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  margin: 1.75rem 0 0.85rem;
+  padding: 10px 0 8px;
+  border-bottom: 2px solid rgba($primary-color, 0.35);
+  color: #102945;
+  font-size: 1.12rem;
+  font-weight: 950;
+  line-height: 1.35;
+  letter-spacing: 0;
 }
 
 .gwrd-md-h2:first-child {
@@ -147,25 +158,25 @@ $navy: #1a2b4a;
 
 .gwrd-md-h3 {
   margin: 1.25rem 0 0.5rem;
+  color: rgba(16, 41, 69, 0.92);
   font-size: 1.02rem;
   font-weight: 900;
-  color: rgba($navy, 0.92);
 }
 
 .gwrd-md-p {
   margin: 0.65rem 0;
-  color: rgba($navy, 0.88);
+  color: rgba(16, 41, 69, 0.88);
   line-height: 1.65;
 }
 
 .gwrd-md-strong {
+  color: #102945;
   font-weight: 900;
-  color: $navy;
 }
 
 .gwrd-md-em {
+  color: rgba(16, 41, 69, 0.72);
   font-style: italic;
-  color: rgba($navy, 0.72);
   font-weight: 650;
 }
 
@@ -173,7 +184,7 @@ $navy: #1a2b4a;
 .gwrd-md-ol {
   margin: 0.65rem 0 0.85rem;
   padding-left: 1.35rem;
-  color: rgba($navy, 0.9);
+  color: rgba(16, 41, 69, 0.9);
 }
 
 .gwrd-md-li {
@@ -187,9 +198,9 @@ $navy: #1a2b4a;
 }
 
 .gwrd-md-hr {
+  height: 2px;
   margin: 1.5rem 0;
   border: none;
-  height: 2px;
   border-radius: 999px;
   background: linear-gradient(
     90deg,
@@ -205,25 +216,24 @@ $navy: #1a2b4a;
   border-left: 4px solid $primary-color;
   border-radius: 0 12px 12px 0;
   background: rgba($primary-color, 0.08);
-  color: rgba($navy, 0.85);
+  color: rgba(16, 41, 69, 0.85);
 }
 
-/* Bảng GFM */
 .gwrd-table-wrap {
-  margin: 1rem auto 1.25rem;
   width: 100%;
   max-width: 100%;
+  margin: 1rem auto 1.25rem;
   overflow-x: auto;
-  border-radius: 14px;
   border: 1px solid rgba($navy, 0.1);
-  background: #fff;
+  border-radius: 14px;
+  background: #ffffff;
   box-shadow: 0 6px 20px rgba(26, 43, 74, 0.06);
   -webkit-overflow-scrolling: touch;
 }
 
 .gwrd-md-table {
   width: 100%;
-  min-width: 280px;
+  min-width: 420px;
   border-collapse: collapse;
   font-size: 0.92rem;
 }
@@ -238,10 +248,10 @@ $navy: #1a2b4a;
 
 .gwrd-md-th {
   padding: 12px 14px;
-  text-align: left;
-  font-weight: 900;
-  color: $navy;
   border-bottom: 2px solid rgba($primary-color, 0.35);
+  color: #102945;
+  font-weight: 900;
+  text-align: left;
   white-space: nowrap;
 }
 
@@ -251,8 +261,8 @@ $navy: #1a2b4a;
 
 .gwrd-md-td {
   padding: 11px 14px;
-  color: rgba($navy, 0.88);
   border-bottom: 1px solid rgba($navy, 0.07);
+  color: rgba(16, 41, 69, 0.88);
   vertical-align: top;
 }
 
@@ -272,15 +282,13 @@ $navy: #1a2b4a;
   background: rgba($primary-color, 0.08);
 }
 
-/* Cột số / tỷ lệ canh phải cho dễ đọc (bảng 3 cột hành vi) */
 .gwrd-md-tbody .gwrd-md-tr .gwrd-md-td:nth-child(2),
 .gwrd-md-tbody .gwrd-md-tr .gwrd-md-td:nth-child(3) {
-  text-align: right;
   font-variant-numeric: tabular-nums;
   font-weight: 750;
+  text-align: right;
 }
 
-/* Bảng 2 cột (chỉ số / giá trị): cột 2 canh phải */
 .gwrd-md-table:has(.gwrd-md-thead .gwrd-md-th:nth-child(2):last-child)
   .gwrd-md-tbody
   .gwrd-md-td:nth-child(2) {
@@ -288,27 +296,24 @@ $navy: #1a2b4a;
 }
 
 .gwrd-json {
-  margin: 0 auto;
-  padding: 22px clamp(20px, 4vw, 36px) 28px;
+  max-width: 100%;
+  max-height: min(70vh, 560px);
+  box-sizing: border-box;
+  margin: 0;
+  padding: 24px 28px 30px;
+  overflow: auto;
   border-radius: 0;
   background: rgba(0, 0, 0, 0.04);
   font-size: 0.82rem;
-  overflow: auto;
-  max-height: min(70vh, 560px);
   line-height: 1.45;
-  max-width: 42rem;
-  box-sizing: border-box;
 }
 
 @media (max-width: 600px) {
-  .gwrd {
-    padding: 0 14px;
-  }
-
   .gwrd-hero,
-  .gwrd-prose {
-    padding-left: 16px;
-    padding-right: 16px;
+  .gwrd-prose,
+  .gwrd-json {
+    padding-left: 18px;
+    padding-right: 18px;
   }
 
   .gwrd-md-th,
