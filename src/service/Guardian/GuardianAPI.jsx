@@ -22,6 +22,35 @@ const getChildren = async () => {
   }
 };
 
+const requestEraseOtp = async (childId) => {
+  try {
+    const response = await instance.post(
+      `guardian/${encodeURIComponent(childId)}/erase/otp`,
+    );
+    return response.data;
+  } catch (error) {
+    logApiError(error, "GuardianAPI.requestEraseOtp");
+    console.error("Error requesting erase OTP:", error);
+    throw error;
+  }
+};
+
+const eraseChildData = async (childId, otpCode) => {
+  try {
+    const response = await instance.delete(
+      `guardian/${encodeURIComponent(childId)}/erase`,
+      {
+        data: { otpCode },
+      },
+    );
+    return response.data;
+  } catch (error) {
+    logApiError(error, "GuardianAPI.eraseChildData");
+    console.error("Error erasing child data:", error);
+    throw error;
+  }
+};
+
 //tao bao cao tuan cho tre
 const createWeeklyReport = async (childId) => {
   try {
@@ -92,8 +121,10 @@ const approveReport = async (reportId, childId) => {
 export default {
   approveReport,
   createWeeklyReport,
+  eraseChildData,
   getChildren,
   postLinkChild,
+  requestEraseOtp,
   getReportChildById,
   getReportById,
 };

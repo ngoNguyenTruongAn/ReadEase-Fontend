@@ -18,6 +18,7 @@ import DashboardGuardian from "./components/Web/Guardian/DashboardGuardian/Dashb
 import Children from "./components/Web/Guardian/Children/Children";
 import GuardianReports from "./components/Web/Guardian/WeeklyReports/GuardianReports";
 import GuardianReportDetail from "./components/Web/Guardian/WeeklyReports/GuardianReportDetail";
+import GuardianSettings from "./components/Web/Guardian/Settings/GuardianSettings";
 import ClinicianLayout from "./components/Web/Clinician/ClinicianLayout";
 import DashboardClinician from "./components/Web/Clinician/DashboardClinician/DashboardClinician";
 import Patients from "./components/Web/Clinician/Patients/Patients";
@@ -67,6 +68,7 @@ function App() {
             path="/guardian/reports/:reportId"
             element={<GuardianReportDetail />}
           />
+          <Route path="/guardian/settings" element={<GuardianSettings />} />
         </Route>
 
         {/* clinician */}

@@ -157,10 +157,6 @@ const GuardianReports = () => {
       <div className="gwr-header">
         <div>
           <h1 className="gwr-title">Báo cáo tuần</h1>
-          <p className="gwr-subtitle">
-            Chọn một trẻ đã liên kết để xem lịch sử báo cáo, mở chi tiết hoặc
-            yêu cầu tạo báo cáo mới (nếu backend cho phép).
-          </p>
         </div>
         <button
           type="button"

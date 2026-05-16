@@ -1,10 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useOutletContext } from "react-router-dom";
 import { toast } from "react-toastify";
 import GuardianAPI from "../../../../service/Guardian/GuardianAPI";
 import { humanizeApiError } from "../../../../service/instance";
 import "./Children.scss";
 
 const Children = () => {
+  const outletContext = useOutletContext();
+  const refreshLayoutChildren = outletContext?.refreshChildren;
+
   const [inviteCode, setInviteCode] = useState("");
   const [linking, setLinking] = useState(false);
 
@@ -78,6 +82,15 @@ const Children = () => {
     }
   };
 
+  const syncLayoutChildren = async () => {
+    if (typeof refreshLayoutChildren !== "function") return;
+    await refreshLayoutChildren();
+  };
+
+  const handleRefreshChildren = async () => {
+    await Promise.all([fetchChildren(), syncLayoutChildren()]);
+  };
+
   useEffect(() => {
     fetchChildren();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -93,7 +106,7 @@ const Children = () => {
       const res = await GuardianAPI.postLinkChild(code);
       toast.success(res?.message || "Liên kết tài khoản con thành công.");
       setInviteCode("");
-      await fetchChildren();
+      await Promise.all([fetchChildren(), syncLayoutChildren()]);
     } catch (err) {
       toast.error(
         humanizeApiError(err, "Liên kết thất bại. Vui lòng thử lại."),
@@ -108,16 +121,12 @@ const Children = () => {
       <div className="gch-header">
         <div>
           <div className="gch-title">Tài khoản của con</div>
-          <div className="gch-subtitle">
-            Nhập mã mời để xác nhận/liên kết tài khoản cho con, và xem danh sách
-            tất cả tài khoản đã liên kết.
-          </div>
         </div>
 
         <button
           type="button"
           className="gch-refresh"
-          onClick={fetchChildren}
+          onClick={handleRefreshChildren}
           disabled={loading}
         >
           {loading ? "Đang tải..." : "Tải lại"}
