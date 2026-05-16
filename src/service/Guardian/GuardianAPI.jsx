@@ -88,6 +88,17 @@ const getReportById = async (reportId) => {
   }
 };
 
+const getChildSessions = async (childId, params = {}) => {
+  try {
+    const response = await instance.get(`sessions/${childId}`, { params });
+    return response.data;
+  } catch (error) {
+    logApiError(error, "GuardianAPI.getChildSessions");
+    console.error("Error getting child sessions:", error);
+    throw error;
+  }
+};
+
 const isMissingApproveRoute = (error) => {
   const status = error?.response?.status;
   return status === 404 || status === 405;
@@ -123,6 +134,7 @@ export default {
   createWeeklyReport,
   eraseChildData,
   getChildren,
+  getChildSessions,
   postLinkChild,
   requestEraseOtp,
   getReportChildById,

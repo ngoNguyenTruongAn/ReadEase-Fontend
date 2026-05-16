@@ -10,25 +10,13 @@ import {
 import GuardianAPI from "../../../../service/Guardian/GuardianAPI";
 import "./DashboardGuardian.scss";
 
-const DESIGN_REPORTS = [
-  {
-    title: "Báo cáo Đánh giá Tuần 3 - Tháng 3",
-    sub: "Ghi nhận 5 phiên đọc",
-    status: "Báo cáo tự động tạo bởi AI ✨",
-  },
-  {
-    title: "Báo cáo Đánh giá Tuần 2 - Tháng 3",
-    sub: "Ghi nhận 5 phiên đọc",
-    status: "Đã được Bác sĩ [Tên Bác sĩ] xem xét",
-  },
-];
-
 const EMPTY_CHILDREN = [];
+const REPORT_PREVIEW_LIMIT = 2;
 
 const STAT_LABELS = {
   sessions: "Số phiên đọc tuần này",
   points: "Điểm nỗ lực đạt được",
-  focus: "Tổng thời gian tập trung",
+  reading: "Tổng thời gian đọc",
 };
 
 const METRIC_CONTAINER_KEYS = [
@@ -108,41 +96,6 @@ const POINT_KEYS = [
   "balance",
 ];
 
-const FOCUS_DURATION_KEYS = [
-  "focus_time_seconds",
-  "focusTimeSeconds",
-  "total_focus_time_seconds",
-  "totalFocusTimeSeconds",
-  "focused_seconds",
-  "focusedSeconds",
-  "focused_time_seconds",
-  "focusedTimeSeconds",
-  "focus_duration_seconds",
-  "focusDurationSeconds",
-  "focus_time_ms",
-  "focusTimeMs",
-  "total_focus_time_ms",
-  "totalFocusTimeMs",
-  "focused_ms",
-  "focusedMs",
-  "focus_duration_ms",
-  "focusDurationMs",
-  "focus_time_minutes",
-  "focusTimeMinutes",
-  "total_focus_minutes",
-  "totalFocusMinutes",
-  "focused_minutes",
-  "focusedMinutes",
-  "focus_time",
-  "focusTime",
-  "total_focus_time",
-  "totalFocusTime",
-  "focused_time",
-  "focusedTime",
-  "focus_duration",
-  "focusDuration",
-];
-
 const READING_DURATION_KEYS = [
   "reading_time_seconds",
   "readingTimeSeconds",
@@ -176,6 +129,18 @@ const READING_DURATION_KEYS = [
   "duration",
 ];
 
+const REPORT_TEXT_KEYS = [
+  "content",
+  "summary",
+  "description",
+  "text",
+  "report_content",
+  "markdown",
+  "body",
+  "report_body",
+  "full_text",
+];
+
 const normalizeReportsList = (res) => {
   const data = res?.data ?? res;
   if (Array.isArray(data)) return data;
@@ -185,8 +150,30 @@ const normalizeReportsList = (res) => {
   return [];
 };
 
+const normalizeSessionsList = (res) => {
+  const data = res?.data ?? res;
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.sessions)) return data.sessions;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.results)) return data.results;
+  return [];
+};
+
 const childRowId = (row) =>
   String(row?.id ?? row?.child_id ?? row?.user_id ?? "").trim();
+
+const childDisplayName = (row) =>
+  String(
+    row?.name ??
+      row?.display_name ??
+      row?.displayName ??
+      row?.full_name ??
+      row?.fullName ??
+      row?.username ??
+      row?.email ??
+      "Trẻ",
+  ).trim();
 
 const reportRowId = (row) => row?.id ?? row?.report_id ?? row?._id;
 
@@ -248,6 +235,61 @@ const aggregateFirstNumber = (rows, keys, options) =>
     { total: 0, found: false },
   );
 
+const collectReportText = (row) => {
+  const sources = collectMetricSources(row);
+  const parts = [];
+
+  sources.forEach((source) => {
+    REPORT_TEXT_KEYS.forEach((key) => {
+      const value = source?.[key];
+      if (typeof value === "string" && value.trim()) {
+        parts.push(value.trim());
+      }
+    });
+  });
+
+  return parts.join("\n");
+};
+
+const parseSessionCountFromText = (text) => {
+  const raw = String(text ?? "").trim();
+  if (!raw) return null;
+
+  const patterns = [
+    /(?:hoàn\s+thành|hoan\s+thanh|ghi\s+nhận|ghi\s+nhan)\D{0,60}(\d+)\s*(?:phiên|phien|buổi|buoi|lần|lan)\s*(?:đọc|doc)/i,
+    /(\d+)\s*(?:phiên|phien|buổi|buoi|lần|lan)\s*(?:đọc|doc)/i,
+    /(?:ghi\s+nhận|so\s+phien\s+doc|số\s+phiên\s+đọc|phiên\s+đọc)\D{0,30}(\d+)/i,
+    /(\d+)\s*phiên\s*đọc/i,
+    /(\d+)\s*phien\s*doc/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    const number = match ? Number(match[1]) : NaN;
+    if (Number.isFinite(number)) return number;
+  }
+
+  return null;
+};
+
+const pickSessionCount = (row) =>
+  pickFirstNumber(row, SESSION_KEYS, { countArrays: true }) ??
+  parseSessionCountFromText(collectReportText(row));
+
+const aggregateSessionCount = (rows) =>
+  rows.reduce(
+    (acc, row) => {
+      const value = pickSessionCount(row);
+      if (value === null) return acc;
+
+      return {
+        total: acc.total + value,
+        found: true,
+      };
+    },
+    { total: 0, found: false },
+  );
+
 const parseDurationString = (value) => {
   const text = String(value ?? "").trim().toLowerCase();
   if (!text) return null;
@@ -294,6 +336,29 @@ const parseDurationString = (value) => {
   return matched ? total : null;
 };
 
+const parseFirstDurationString = (value) => {
+  const text = String(value ?? "").trim().toLowerCase();
+  if (!text) return null;
+
+  const match = text.match(
+    /(\d+(?:[.,]\d+)?)\s*(?:giờ|gio|hour|hours|hr|h|phút|phut|minute|minutes|min|m|giây|giay|second|seconds|sec|s)(?=\s|$|[.,;:])/i,
+  );
+  return match ? parseDurationString(match[0]) : null;
+};
+
+const parseReportReadingDurationFromText = (text) => {
+  const raw = String(text ?? "").trim();
+  if (!raw) return null;
+
+  const totalMatch = raw.match(
+    /(?:tổng\s+thời\s+gian(?:\s+đọc)?|tong\s+thoi\s+gian(?:\s+doc)?|thời\s+lượng|thoi\s+luong)[^.\n]{0,100}?(\d+(?:[.,]\d+)?\s*(?:giờ|gio|hour|hours|hr|h|phút|phut|minute|minutes|min|m|giây|giay|second|seconds|sec|s))/i,
+  );
+
+  return totalMatch
+    ? parseDurationString(totalMatch[1])
+    : parseFirstDurationString(raw);
+};
+
 const durationSecondsFromValue = (value, key) => {
   const keyText = String(key).toLowerCase();
   const number = toFiniteNumber(value);
@@ -310,6 +375,9 @@ const durationSecondsFromValue = (value, key) => {
       return number * 60;
     }
     if (keyText.includes("hour")) return number * 3600;
+    if ((keyText === "duration" || keyText.endsWith("_duration")) && number > 21600) {
+      return number / 1000;
+    }
     return number;
   }
 
@@ -329,6 +397,41 @@ const pickFirstDurationSeconds = (row, keys) => {
   return null;
 };
 
+const toValidDate = (value) => {
+  const date = value ? new Date(value) : null;
+  return date && !Number.isNaN(date.getTime()) ? date : null;
+};
+
+const sessionStartDate = (row) =>
+  toValidDate(
+    row?.started_at ??
+      row?.startedAt ??
+      row?.start_time ??
+      row?.startTime ??
+      row?.created_at ??
+      row?.createdAt,
+  );
+
+const sessionEndDate = (row) =>
+  toValidDate(
+    row?.ended_at ??
+      row?.endedAt ??
+      row?.end_time ??
+      row?.endTime ??
+      row?.completed_at ??
+      row?.completedAt ??
+      row?.finished_at ??
+      row?.finishedAt,
+  );
+
+const sessionDurationSeconds = (row) => {
+  const start = sessionStartDate(row);
+  const end = sessionEndDate(row);
+  if (!start || !end || end < start) return null;
+
+  return (end.getTime() - start.getTime()) / 1000;
+};
+
 const aggregateDurationSeconds = (rows, keys) =>
   rows.reduce(
     (acc, row) => {
@@ -341,6 +444,105 @@ const aggregateDurationSeconds = (rows, keys) =>
       };
     },
     { total: 0, found: false },
+  );
+
+const pickReadingDurationSeconds = (row) =>
+  pickFirstDurationSeconds(row, READING_DURATION_KEYS) ??
+  sessionDurationSeconds(row) ??
+  parseReportReadingDurationFromText(collectReportText(row));
+
+const aggregateReadingDurationSeconds = (rows) =>
+  rows.reduce(
+    (acc, row) => {
+      const value = pickReadingDurationSeconds(row);
+      if (value === null) return acc;
+
+      return {
+        total: acc.total + value,
+        found: true,
+      };
+    },
+    { total: 0, found: false },
+  );
+
+const parseMaybeJsonObject = (value) => {
+  if (!value) return {};
+  if (typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value !== "string") return {};
+
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : {};
+  } catch {
+    return {};
+  }
+};
+
+const sessionEffortScore = (row) => {
+  const direct = toFiniteNumber(row?.effort_score ?? row?.effortScore);
+  if (direct !== null) return direct;
+
+  const summary = parseMaybeJsonObject(
+    row?.cognitive_state_summary ?? row?.cognitiveStateSummary,
+  );
+  return toFiniteNumber(summary?.effort_score ?? summary?.effortScore);
+};
+
+const aggregateEffortScorePoints = (sessions) =>
+  sessions.reduce(
+    (acc, session) => {
+      const score = sessionEffortScore(session);
+      if (score === null) return acc;
+
+      return {
+        total: acc.total + score * 100,
+        found: true,
+      };
+    },
+    { total: 0, found: false },
+  );
+
+const sessionDate = (row) => {
+  return (
+    sessionEndDate(row) ??
+    toValidDate(row?.updated_at ?? row?.updatedAt) ??
+    sessionStartDate(row)
+  );
+};
+
+const sessionStatusText = (row) =>
+  String(
+    row?.status ??
+      row?.state ??
+      row?.session_status ??
+      row?.sessionStatus ??
+      row?.reading_status ??
+      row?.readingStatus ??
+      row?.completion_status ??
+      row?.completionStatus ??
+      "",
+  )
+    .trim()
+    .toLowerCase();
+
+const isCompletedSession = (row) => {
+  if (!row) return false;
+
+  const status = sessionStatusText(row);
+  return status === "completed";
+};
+
+const isCurrentWeekSession = (row) => {
+  const { start: weekStart, end: weekEnd } = currentWeekBounds();
+  const date = sessionDate(row);
+  return date ? date >= weekStart && date < weekEnd : true;
+};
+
+const completedCurrentWeekSessionEntries = (sessionEntries) =>
+  sessionEntries.filter(
+    ({ session }) => isCompletedSession(session) && isCurrentWeekSession(session),
   );
 
 const hasReportId = (row) => {
@@ -428,72 +630,185 @@ const formatDuration = (secondsValue) => {
   const totalSeconds = Math.max(0, Math.round(secondsValue));
   if (totalSeconds <= 0) return "0 phút";
 
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  const parts = [];
-  if (hours > 0) parts.push(`${hours} giờ`);
-  if (minutes > 0) parts.push(`${minutes} phút`);
-  if (seconds > 0 && hours === 0) parts.push(`${seconds} giây`);
-
-  return parts.join(" ") || "0 phút";
+  return `${Math.floor(totalSeconds / 60)} phút`;
 };
 
-const buildStats = (children = [], reportEntries = []) => {
-  const statsReportRows = selectStatsReportEntries(reportEntries).map(
-    ({ report }) => report,
-  );
+const reportDisplayDate = (row) => {
+  const raw =
+    row?.period_end ??
+    row?.periodEnd ??
+    row?.week_end ??
+    row?.weekEnd ??
+    row?.created_at ??
+    row?.createdAt ??
+    row?.generated_at ??
+    row?.generatedAt ??
+    row?.period_start ??
+    row?.periodStart ??
+    row?.week_start ??
+    row?.weekStart;
 
-  const weeklyChildSessions = aggregateFirstNumber(
-    children,
-    WEEKLY_SESSION_KEYS,
-    { countArrays: true },
+  const date = raw ? new Date(raw) : null;
+  return date && !Number.isNaN(date.getTime()) ? date : null;
+};
+
+const weekOfMonth = (date) => Math.max(1, Math.ceil(date.getDate() / 7));
+
+const reportTitle = (row) => {
+  const date = reportDisplayDate(row);
+  if (date) {
+    return `Báo cáo Đánh giá Tuần ${weekOfMonth(date)} - Tháng ${
+      date.getMonth() + 1
+    }`;
+  }
+
+  return (
+    String(row?.title ?? row?.week_label ?? row?.name ?? "").trim() ||
+    (reportRowId(row) != null ? `Báo cáo #${reportRowId(row)}` : "Báo cáo")
   );
-  const reportSessions = aggregateFirstNumber(statsReportRows, SESSION_KEYS, {
-    countArrays: true,
-  });
-  const childSessions = aggregateFirstNumber(children, SESSION_KEYS, {
-    countArrays: true,
-  });
-  const sessions = weeklyChildSessions.found
-    ? weeklyChildSessions.total
-    : reportSessions.found
-      ? reportSessions.total
-      : childSessions.found
-        ? childSessions.total
-        : 0;
+};
+
+const reportSessionText = (row) => {
+  const count = pickSessionCount(row);
+  if (count === null) return "Chưa có dữ liệu phiên đọc";
+
+  return `Ghi nhận ${formatInteger(count)} phiên đọc`;
+};
+
+const reportSubtitle = (row, child) =>
+  `${childDisplayName(child)}: ${reportSessionText(row)}`;
+
+const reviewedByName = (row) =>
+  String(
+    row?.reviewed_by_name ??
+      row?.reviewedByName ??
+      row?.approved_by_name ??
+      row?.approvedByName ??
+      row?.clinician_name ??
+      row?.clinicianName ??
+      row?.doctor_name ??
+      row?.doctorName ??
+      "",
+  ).trim();
+
+const isReviewedReport = (row) => {
+  if (!row) return false;
+  if (row.approved === true || row.is_approved === true) return true;
+
+  const status = String(
+    row.approval_status ?? row.review_status ?? row.status ?? "",
+  ).toLowerCase();
+
+  return ["approved", "published", "visible", "reviewed", "da_duyet"].some(
+    (token) => status.includes(token),
+  );
+};
+
+const reportStatus = (row) => {
+  if (isReviewedReport(row)) {
+    const reviewer = reviewedByName(row);
+    return reviewer
+      ? `Đã được ${reviewer} xem xét`
+      : "Đã được chuyên gia xem xét";
+  }
+
+  return "Báo cáo tự động tạo bởi AI ✨";
+};
+
+const buildReportPreview = ({ childId, child, report }) => {
+  const reportId = reportRowId(report);
+
+  return {
+    id: `${childId}-${reportId}`,
+    title: reportTitle(report),
+    sub: reportSubtitle(report, child),
+    status: reportStatus(report),
+    to: `/guardian/reports/${encodeURIComponent(
+      String(reportId),
+    )}?child=${encodeURIComponent(childId)}`,
+  };
+};
+
+const buildStats = (children = [], reportEntries = [], sessionEntries = []) => {
+  const statsReportEntries = selectStatsReportEntries(reportEntries);
+  const statsReportRows = statsReportEntries.map(({ report }) => report);
+  const completedSessionEntries =
+    completedCurrentWeekSessionEntries(sessionEntries);
+
+  const childIds = new Set([
+    ...children.map((child) => childRowId(child)).filter(Boolean),
+    ...statsReportEntries.map(({ childId }) => childId).filter(Boolean),
+    ...completedSessionEntries.map(({ childId }) => childId).filter(Boolean),
+  ]);
+
+  const completionStats = [...childIds].reduce(
+    (acc, childId) => {
+      const childSessions = completedSessionEntries
+        .filter((entry) => entry.childId === childId)
+        .map(({ session }) => session);
+
+      if (childSessions.length) {
+        const duration = aggregateReadingDurationSeconds(childSessions);
+        const effort = aggregateEffortScorePoints(childSessions);
+        return {
+          sessions: acc.sessions + childSessions.length,
+          readingSeconds:
+            acc.readingSeconds + (duration.found ? duration.total : 0),
+          foundReading: acc.foundReading || duration.found,
+          points: acc.points + (effort.found ? effort.total : 0),
+          foundPoints: acc.foundPoints || effort.found,
+        };
+      }
+
+      const childReportRows = statsReportEntries
+        .filter((entry) => entry.childId === childId)
+        .map(({ report }) => report);
+      const reportSessionCount = aggregateSessionCount(childReportRows);
+      const reportDuration = aggregateReadingDurationSeconds(childReportRows);
+      if (reportSessionCount.found || reportDuration.found) {
+        return {
+          sessions:
+            acc.sessions + (reportSessionCount.found ? reportSessionCount.total : 0),
+          readingSeconds:
+            acc.readingSeconds + (reportDuration.found ? reportDuration.total : 0),
+          foundReading: acc.foundReading || reportDuration.found,
+          points: acc.points,
+          foundPoints: acc.foundPoints,
+        };
+      }
+
+      return {
+        ...acc,
+      };
+    },
+    {
+      sessions: 0,
+      readingSeconds: 0,
+      foundReading: false,
+      points: 0,
+      foundPoints: false,
+    },
+  );
 
   const childPoints = aggregateFirstNumber(children, POINT_KEYS);
   const reportPoints = aggregateFirstNumber(statsReportRows, POINT_KEYS);
-  const points = childPoints.found && (childPoints.total > 0 || !reportPoints.found)
-    ? childPoints.total
-    : reportPoints.found
-      ? reportPoints.total
-      : 0;
+  const points = completionStats.foundPoints
+    ? completionStats.points
+    : childPoints.found && (childPoints.total > 0 || !reportPoints.found)
+      ? childPoints.total
+      : reportPoints.found
+        ? reportPoints.total
+        : 0;
 
-  const childFocus = aggregateDurationSeconds(children, FOCUS_DURATION_KEYS);
-  const reportFocus = aggregateDurationSeconds(statsReportRows, FOCUS_DURATION_KEYS);
-  const childReading = aggregateDurationSeconds(children, READING_DURATION_KEYS);
-  const reportReading = aggregateDurationSeconds(
-    statsReportRows,
-    READING_DURATION_KEYS,
-  );
-  const focusSeconds = childFocus.found
-    ? childFocus.total
-    : reportFocus.found
-      ? reportFocus.total
-      : childReading.found
-        ? childReading.total
-        : reportReading.found
-          ? reportReading.total
-          : 0;
+  const readingSeconds = completionStats.foundReading
+    ? completionStats.readingSeconds
+    : 0;
 
   return [
     {
       key: "sessions",
       label: STAT_LABELS.sessions,
-      value: formatInteger(sessions),
+      value: formatInteger(completionStats.sessions),
     },
     {
       key: "points",
@@ -501,9 +816,9 @@ const buildStats = (children = [], reportEntries = []) => {
       value: formatInteger(points),
     },
     {
-      key: "focus",
-      label: STAT_LABELS.focus,
-      value: formatDuration(focusSeconds),
+      key: "reading",
+      label: STAT_LABELS.reading,
+      value: formatDuration(readingSeconds),
     },
   ];
 };
@@ -532,44 +847,47 @@ const DashboardGuardian = () => {
         return;
       }
 
-      const reportGroups = await Promise.all(
+      const childDataGroups = await Promise.all(
         outletChildren.map(async (child) => {
           const childId = childRowId(child);
-          if (!childId) return [];
+          if (!childId) return { reports: [], sessions: [] };
 
-          try {
-            const res = await GuardianAPI.getReportChildById(childId);
-            return normalizeReportsList(res).map((report) => ({
-              childId,
-              report,
-            }));
-          } catch {
-            return [];
-          }
+          const [reports, sessions] = await Promise.all([
+            GuardianAPI.getReportChildById(childId)
+              .then((res) =>
+                normalizeReportsList(res).map((report) => ({
+                  childId,
+                  child,
+                  report,
+                })),
+              )
+              .catch(() => []),
+            GuardianAPI.getChildSessions(childId)
+              .then((res) =>
+                normalizeSessionsList(res).map((session) => ({
+                  childId,
+                  child,
+                  session,
+                })),
+              )
+              .catch(() => []),
+          ]);
+
+          return { reports, sessions };
         }),
       );
 
       if (cancelled) return;
 
-      const reportEntries = reportGroups.flat();
+      const reportEntries = childDataGroups.flatMap((group) => group.reports);
+      const sessionEntries = childDataGroups.flatMap((group) => group.sessions);
       const latestReports = reportEntries
         .filter(({ report }) => hasReportId(report))
         .sort((a, b) => reportTimestamp(b.report) - reportTimestamp(a.report))
-        .slice(0, DESIGN_REPORTS.length)
-        .map(({ childId, report }, index) => {
-          const reportId = reportRowId(report);
-          const design = DESIGN_REPORTS[index];
+        .slice(0, REPORT_PREVIEW_LIMIT)
+        .map(buildReportPreview);
 
-          return {
-            ...design,
-            id: `${childId}-${reportId}`,
-            to: `/guardian/reports/${encodeURIComponent(
-              String(reportId),
-            )}?child=${encodeURIComponent(childId)}`,
-          };
-        });
-
-      setStats(buildStats(outletChildren, reportEntries));
+      setStats(buildStats(outletChildren, reportEntries, sessionEntries));
       setReports(latestReports);
     };
 
@@ -583,7 +901,7 @@ const DashboardGuardian = () => {
   const statConfig = [
     { key: "sessions", icon: FaBookOpen, tone: "book" },
     { key: "points", icon: FaTrophy, tone: "trophy" },
-    { key: "focus", icon: FaClock, tone: "clock" },
+    { key: "reading", icon: FaClock, tone: "clock" },
   ];
 
   return (

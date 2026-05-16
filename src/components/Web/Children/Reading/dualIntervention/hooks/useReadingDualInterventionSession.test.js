@@ -1324,7 +1324,7 @@ describe("useReadingDualInterventionSession scenarios", () => {
     expect(result.current.wordIntervention.regressionFocusRadius).toBe(3);
   });
 
-  it("waits around 4.2 seconds of stationary cursor before local dwell fallback", async () => {
+  it("maps same-word dwell fallback to regression stall instead of distraction", async () => {
     localStorage.setItem(
       "access_token",
       createJwt({
@@ -1367,8 +1367,10 @@ describe("useReadingDualInterventionSession scenarios", () => {
     });
 
     expect(result.current.visualFlags.isVisualActive).toBe(true);
-    expect(result.current.wordIntervention.distractionWordIndex).toBe(7);
-    expect(result.current.wordIntervention.regressionWordIndex).toBe(null);
+    expect(result.current.visualFlags.mode).toBe("DUAL_INTERVENTION");
+    expect(result.current.wordIntervention.distractionWordIndex).toBe(null);
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(7);
+    expect(result.current.wordIntervention.regressionType).toBe("STALL");
     expect(result.current.trackingDebug.localFallbackReason).toBe("local-dwell-stall");
   });
 
@@ -1419,7 +1421,72 @@ describe("useReadingDualInterventionSession scenarios", () => {
     expect(result.current.trackingDebug.localFallbackInterventions).toBe(0);
   });
 
-  it("delays backend distraction while cursor is still progressing inside a long word", async () => {
+  it("classifies fast erratic scanning as local distraction fallback", async () => {
+    localStorage.setItem(
+      "access_token",
+      createJwt({
+        sub: "user-erratic",
+        role: "ROLE_CHILD",
+      }),
+    );
+
+    const { result } = renderHook(() =>
+      useReadingDualInterventionSession({
+        enabled: true,
+        contentId: "story-erratic",
+        apiBaseUrl: "http://localhost:3000/api/v1/",
+        resolveTooltipByWordIndex: () => null,
+      }),
+    );
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    const points = [
+      { wordIndex: 3, x: 100, y: 100 },
+      { wordIndex: 8, x: 260, y: 100 },
+      { wordIndex: 14, x: 110, y: 250 },
+      { wordIndex: 20, x: 280, y: 250 },
+      { wordIndex: 26, x: 120, y: 110 },
+      { wordIndex: 32, x: 300, y: 290 },
+      { wordIndex: 38, x: 130, y: 280 },
+      { wordIndex: 44, x: 310, y: 120 },
+    ];
+
+    act(() => {
+      points.forEach((point) => {
+        result.current.handleStoryPointerMove(createPointerMoveEvent(point));
+        vi.advanceTimersByTime(120);
+      });
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.visualFlags.isVisualActive).toBe(true);
+    expect(result.current.visualFlags.mode).toBe("VISUAL_ONLY");
+    expect(result.current.wordIntervention.distractionWordIndex).toBe(44);
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(null);
+    expect(result.current.trackingDebug.localFallbackReason).toBe("local-erratic-movement");
+    expect(result.current.trackingDebug.localFallbackInterventions).toBe(1);
+
+    act(() => {
+      points.forEach((point) => {
+        result.current.handleStoryPointerMove(createPointerMoveEvent(point));
+        vi.advanceTimersByTime(120);
+      });
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.trackingDebug.localFallbackInterventions).toBe(1);
+  });
+
+  it("applies backend distraction immediately while cursor is still progressing inside a long word", async () => {
     localStorage.setItem(
       "tracking_token",
       createJwt({
@@ -1480,11 +1547,13 @@ describe("useReadingDualInterventionSession scenarios", () => {
       await flushMicrotasks();
     });
 
-    expect(result.current.visualFlags.isVisualActive).toBe(false);
-    expect(result.current.wordIntervention.distractionWordIndex).toBe(null);
+    expect(result.current.visualFlags.isVisualActive).toBe(true);
+    expect(result.current.visualFlags.mode).toBe("VISUAL_ONLY");
+    expect(result.current.wordIntervention.distractionWordIndex).toBe(7);
+    expect(result.current.wordIntervention.regressionWordIndex).toBe(null);
   });
 
-  it("applies delayed backend distraction after the cursor is truly stationary", async () => {
+  it("applies backend distraction without requiring stationary dwell", async () => {
     localStorage.setItem(
       "tracking_token",
       createJwt({
@@ -1521,16 +1590,6 @@ describe("useReadingDualInterventionSession scenarios", () => {
           wordIndex: 7,
         },
       });
-    });
-
-    await act(async () => {
-      await flushMicrotasks();
-    });
-
-    expect(result.current.wordIntervention.distractionWordIndex).toBe(null);
-
-    act(() => {
-      vi.advanceTimersByTime(4400);
     });
 
     await act(async () => {

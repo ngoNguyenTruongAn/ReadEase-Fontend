@@ -97,6 +97,15 @@ const LOCAL_FALLBACK_DWELL_MIN_MS = 4200;
 const LOCAL_FALLBACK_DWELL_POINTER_TOLERANCE_PX = 6;
 const LOCAL_FALLBACK_DWELL_MOTION_STEP_PX = 0.75;
 const LOCAL_FALLBACK_DWELL_MOTION_RESET_PX = 3;
+const LOCAL_FALLBACK_ERRATIC_WINDOW_MS = 1800;
+const LOCAL_FALLBACK_ERRATIC_MIN_POINTS = 8;
+const LOCAL_FALLBACK_ERRATIC_MIN_PATH_PX = 280;
+const LOCAL_FALLBACK_ERRATIC_MIN_DIRECTION_CHANGES = 4;
+const LOCAL_FALLBACK_ERRATIC_MAX_PATH_EFFICIENCY = 0.48;
+const LOCAL_FALLBACK_ERRATIC_MIN_MEAN_SPEED_PX_MS = 0.22;
+const LOCAL_FALLBACK_ERRATIC_MIN_PEAK_SPEED_PX_MS = 0.55;
+const LOCAL_FALLBACK_ERRATIC_MAX_BACKTRACK_STEPS = 1;
+const LOCAL_FALLBACK_ERRATIC_MAX_ORDERED_FORWARD_RATIO = 0.62;
 // DEV_TEST_MODE: hạ threshold để dễ trigger REGRESSION khi test thủ công,
 // nhưng vẫn đủ cao để không bắt zigzag tự nhiên khi di chuột đọc bình thường.
 // Trước khi release, restore về: MIN_TOTAL_DELTA=2, MIN_EVENTS=2, MIN_DURATION_MS=3000, MAX_GAP_MS=1800
@@ -159,6 +168,9 @@ const createInitialLocalFallbackSignal = (lastTriggeredAt = 0) => ({
   lineWrapGuardMinWordIndex: null,
   lineWrapGuardMaxWordIndex: null,
   lineWrapGuardLineTop: null,
+  erraticPoints: [],
+  erraticReadyAt: null,
+  erraticReadyWordIndex: null,
 });
 
 const resetRegressionSignal = (signal, { clearReadiness = true } = {}) => {
@@ -186,6 +198,14 @@ const resetLineWrapGuard = (signal) => {
   signal.lineWrapGuardMinWordIndex = null;
   signal.lineWrapGuardMaxWordIndex = null;
   signal.lineWrapGuardLineTop = null;
+};
+
+const resetErraticSignal = (signal, { clearReadiness = true } = {}) => {
+  signal.erraticPoints = [];
+  if (clearReadiness) {
+    signal.erraticReadyAt = null;
+    signal.erraticReadyWordIndex = null;
+  }
 };
 
 // Vùng hẹp tối đa để tính là LOOP (số từ)
@@ -404,6 +424,115 @@ const resolveDwellStationaryStartedAt = (signal) => {
   return Math.max(signal.dwellStartedAt, signal.dwellLastMotionAt);
 };
 
+const computePointerDistance = (left, right) => {
+  if (!Number.isFinite(left?.x) || !Number.isFinite(left?.y)) return 0;
+  if (!Number.isFinite(right?.x) || !Number.isFinite(right?.y)) return 0;
+  return Math.hypot(right.x - left.x, right.y - left.y);
+};
+
+const countDirectionChanges = (points) => {
+  let changes = 0;
+  let previousVector = null;
+
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    const vector = {
+      x: current.x - previous.x,
+      y: current.y - previous.y,
+    };
+    const magnitude = Math.hypot(vector.x, vector.y);
+    if (magnitude < 8) continue;
+
+    if (previousVector) {
+      const previousMagnitude = Math.hypot(previousVector.x, previousVector.y);
+      if (previousMagnitude >= 8) {
+        const cosine =
+          (previousVector.x * vector.x + previousVector.y * vector.y) /
+          (previousMagnitude * magnitude);
+        if (cosine <= -0.2) {
+          changes += 1;
+        }
+      }
+    }
+
+    previousVector = vector;
+  }
+
+  return changes;
+};
+
+const summarizeWordMovement = (points) => {
+  let backtrackSteps = 0;
+  let orderedForwardSteps = 0;
+  let transitions = 0;
+
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1].wordIndex;
+    const current = points[index].wordIndex;
+    if (!Number.isInteger(previous) || !Number.isInteger(current) || previous === current) {
+      continue;
+    }
+
+    transitions += 1;
+    const delta = current - previous;
+    if (delta < 0) backtrackSteps += 1;
+    if (delta === 1) orderedForwardSteps += 1;
+  }
+
+  return {
+    backtrackSteps,
+    orderedForwardRatio: transitions > 0 ? orderedForwardSteps / transitions : 0,
+  };
+};
+
+const summarizeErraticPointerWindow = (points) => {
+  if (points.length < 2) {
+    return {
+      pathLength: 0,
+      displacement: 0,
+      pathEfficiency: 1,
+      durationMs: 0,
+      meanSpeed: 0,
+      peakSpeed: 0,
+      directionChanges: 0,
+      backtrackSteps: 0,
+      orderedForwardRatio: 0,
+    };
+  }
+
+  let pathLength = 0;
+  let peakSpeed = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    const distance = computePointerDistance(previous, current);
+    const duration = current.timestamp - previous.timestamp;
+    pathLength += distance;
+    if (duration > 0) {
+      peakSpeed = Math.max(peakSpeed, distance / duration);
+    }
+  }
+
+  const first = points[0];
+  const last = points[points.length - 1];
+  const displacement = computePointerDistance(first, last);
+  const durationMs = Math.max(0, last.timestamp - first.timestamp);
+  const wordMovement = summarizeWordMovement(points);
+
+  return {
+    pathLength,
+    displacement,
+    pathEfficiency: pathLength > 0 ? displacement / pathLength : 1,
+    durationMs,
+    meanSpeed: durationMs > 0 ? pathLength / durationMs : 0,
+    peakSpeed,
+    directionChanges: countDirectionChanges(points),
+    backtrackSteps: wordMovement.backtrackSteps,
+    orderedForwardRatio: wordMovement.orderedForwardRatio,
+  };
+};
+
 const isWordInsideLineWrapGuard = ({ signal, wordIndex, timestamp }) => {
   if (!Number.isInteger(wordIndex) || wordIndex < 0) return false;
   if (!Number.isFinite(signal.lineWrapGuardStartedAt)) return false;
@@ -477,6 +606,8 @@ const useReadingDualInterventionSession = ({
   // Track từ đang được can thiệp hiện tại — dùng để cho phép interrupt cooldown
   // khi signal mới nhắm vào một từ khác hẳn từ đang active.
   const activeInterventionWordIndexRef = useRef(null);
+  const activeInterventionStateRef = useRef(ADAPTATION_STATES.FLUENT);
+  const activeInterventionModeRef = useRef(null);
   const onAdaptationStateRef = useRef(onAdaptationState);
   const sessionIdRef = useRef("");
 
@@ -631,6 +762,8 @@ const useReadingDualInterventionSession = ({
   const resetFluentUi = useCallback(() => {
     pendingAdaptationRef.current = null;
     activeInterventionWordIndexRef.current = null;
+    activeInterventionStateRef.current = ADAPTATION_STATES.FLUENT;
+    activeInterventionModeRef.current = null;
     setVisualFlags(INITIAL_VISUAL_FLAGS);
     setWordIntervention(INITIAL_WORD_INTERVENTION);
     markDebug({
@@ -657,6 +790,8 @@ const useReadingDualInterventionSession = ({
     currentWordIndexRef.current = null;
     pendingAdaptationRef.current = null;
     activeInterventionWordIndexRef.current = null;
+    activeInterventionStateRef.current = ADAPTATION_STATES.FLUENT;
+    activeInterventionModeRef.current = null;
     pointBufferRef.current = [];
     lastPointerRef.current = {
       x: null,
@@ -772,6 +907,15 @@ const useReadingDualInterventionSession = ({
       const signal = localFallbackSignalRef.current;
       const resolvedWordIndex = Number.isInteger(wordIndex) && wordIndex >= 0 ? wordIndex : null;
       const isRegressionState = state === ADAPTATION_STATES.REGRESSION;
+      const fallbackMode = isRegressionState ? "DUAL_INTERVENTION" : "VISUAL_ONLY";
+
+      if (
+        activeInterventionStateRef.current === state &&
+        activeInterventionModeRef.current === fallbackMode &&
+        activeInterventionWordIndexRef.current === resolvedWordIndex
+      ) {
+        return;
+      }
 
       if (
         isRegressionState &&
@@ -800,7 +944,6 @@ const useReadingDualInterventionSession = ({
 
       signal.lastTriggeredAt = now;
 
-      const fallbackMode = isRegressionState ? "DUAL_INTERVENTION" : "VISUAL_ONLY";
       const fallbackParams = isRegressionState
         ? {
             letterSpacing: 0.094,
@@ -880,6 +1023,8 @@ const useReadingDualInterventionSession = ({
       // });
 
       activeInterventionWordIndexRef.current = resolvedWordIndex;
+      activeInterventionStateRef.current = state;
+      activeInterventionModeRef.current = fallbackMode;
       setWordIntervention((previous) => ({
         ...previous,
         distractionWordIndex: state === ADAPTATION_STATES.DISTRACTION ? resolvedWordIndex : null,
@@ -1255,9 +1400,63 @@ const useReadingDualInterventionSession = ({
         triggerLocalFallbackIntervention({
           wordIndex,
           reason: "local-dwell-stall",
+          state: ADAPTATION_STATES.REGRESSION,
+          regressionType: "STALL",
+        });
+      }
+      return true;
+    },
+    [triggerLocalFallbackIntervention],
+  );
+
+  const evaluateErraticDistractionFallbackByPointer = useCallback(
+    ({ wordIndex, x, y, timestamp }) => {
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+
+      const signal = localFallbackSignalRef.current;
+      const nextPoint = {
+        x,
+        y,
+        timestamp,
+        wordIndex: Number.isInteger(wordIndex) && wordIndex >= 0 ? wordIndex : null,
+      };
+
+      signal.erraticPoints = [...(signal.erraticPoints || []), nextPoint].filter(
+        (point) => timestamp - point.timestamp <= LOCAL_FALLBACK_ERRATIC_WINDOW_MS,
+      );
+
+      if (signal.erraticPoints.length < LOCAL_FALLBACK_ERRATIC_MIN_POINTS) {
+        return false;
+      }
+
+      const summary = summarizeErraticPointerWindow(signal.erraticPoints);
+      const hasErraticPointerPath =
+        summary.pathLength >= LOCAL_FALLBACK_ERRATIC_MIN_PATH_PX &&
+        summary.directionChanges >= LOCAL_FALLBACK_ERRATIC_MIN_DIRECTION_CHANGES &&
+        summary.pathEfficiency <= LOCAL_FALLBACK_ERRATIC_MAX_PATH_EFFICIENCY &&
+        (summary.meanSpeed >= LOCAL_FALLBACK_ERRATIC_MIN_MEAN_SPEED_PX_MS ||
+          summary.peakSpeed >= LOCAL_FALLBACK_ERRATIC_MIN_PEAK_SPEED_PX_MS);
+      const isLikelyReadingOrder =
+        summary.orderedForwardRatio > LOCAL_FALLBACK_ERRATIC_MAX_ORDERED_FORWARD_RATIO;
+      const isLikelyIntentionalRegression =
+        summary.backtrackSteps > LOCAL_FALLBACK_ERRATIC_MAX_BACKTRACK_STEPS;
+
+      if (!hasErraticPointerPath || isLikelyReadingOrder || isLikelyIntentionalRegression) {
+        return false;
+      }
+
+      signal.erraticReadyAt = timestamp;
+      signal.erraticReadyWordIndex = nextPoint.wordIndex;
+      resetErraticSignal(signal, { clearReadiness: false });
+
+      if (localFallbackAllowedRef.current) {
+        triggerLocalFallbackIntervention({
+          wordIndex: nextPoint.wordIndex,
+          reason: "local-erratic-movement",
           state: ADAPTATION_STATES.DISTRACTION,
         });
       }
+
       return true;
     },
     [triggerLocalFallbackIntervention],
@@ -1360,6 +1559,8 @@ const useReadingDualInterventionSession = ({
           semanticWordIndex: null,
         }));
         activeInterventionWordIndexRef.current = payloadWordIndex;
+        activeInterventionStateRef.current = payload.state;
+        activeInterventionModeRef.current = payload.mode ?? null;
       } else {
         setWordIntervention((previous) => ({
           ...previous,
@@ -1367,11 +1568,13 @@ const useReadingDualInterventionSession = ({
           regressionType: null,
           regressionFocusRadius: 0,
           distractionWordIndex:
-            payload.state === ADAPTATION_STATES.DISTRACTION ? payload.wordIndex : null,
+            payload.state === ADAPTATION_STATES.DISTRACTION ? payloadWordIndex : null,
           semanticWordIndex: null,
         }));
         activeInterventionWordIndexRef.current =
-          payload.state === ADAPTATION_STATES.DISTRACTION ? (payload.wordIndex ?? null) : null;
+          payload.state === ADAPTATION_STATES.DISTRACTION ? payloadWordIndex : null;
+        activeInterventionStateRef.current = payload.state;
+        activeInterventionModeRef.current = payload.mode ?? null;
       }
 
       if (payload.state === ADAPTATION_STATES.DISTRACTION) {
@@ -1410,21 +1613,7 @@ const useReadingDualInterventionSession = ({
     const signal = localFallbackSignalRef.current;
 
     if (payload.state === ADAPTATION_STATES.DISTRACTION) {
-      const payloadWordIndex = toIntegerOrNull(payload.wordIndex);
-      const currentWordIndex = currentWordIndexRef.current;
-      const dwellWordIndexMatches =
-        payloadWordIndex === null ||
-        payloadWordIndex === signal.dwellWordIndex ||
-        payloadWordIndex === currentWordIndex;
-      const stationaryStartedAt = resolveDwellStationaryStartedAt(signal);
-      const dwellDurationReady =
-        Number.isFinite(stationaryStartedAt) &&
-        timestamp - stationaryStartedAt >= LOCAL_FALLBACK_DWELL_MIN_MS;
-      const dwellRecentlyReady =
-        Number.isFinite(signal.dwellReadyAt) &&
-        timestamp - signal.dwellReadyAt <= LOCAL_FALLBACK_BEHAVIOR_READY_TTL_MS;
-
-      return dwellWordIndexMatches && (dwellDurationReady || dwellRecentlyReady);
+      return true;
     }
 
     if (payload.state === ADAPTATION_STATES.REGRESSION) {
@@ -1953,6 +2142,13 @@ const useReadingDualInterventionSession = ({
       shouldTrigger: false,
     });
 
+    evaluateErraticDistractionFallbackByPointer({
+      wordIndex: resolvedWordIndex,
+      x: event.clientX,
+      y: event.clientY,
+      timestamp,
+    });
+
     flushPendingAdaptationIfReady({ timestamp });
 
     appendTrackingPoint({
@@ -1980,6 +2176,7 @@ const useReadingDualInterventionSession = ({
     appendTrackingPoint,
     enabled,
     evaluateDwellFallbackByPointer,
+    evaluateErraticDistractionFallbackByPointer,
     evaluateRegressionFallbackByWordIndex,
     flushPoints,
     flushPendingAdaptationIfReady,

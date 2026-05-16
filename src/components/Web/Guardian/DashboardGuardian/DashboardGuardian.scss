@@ -12,13 +12,12 @@
 }
 
 .gdg-stat {
-  min-height: 150px;
   display: grid;
   grid-template-columns: 68px minmax(0, 1fr);
   align-items: center;
-  gap: 18px;
+  gap: 16px;
   box-sizing: border-box;
-  padding: 24px;
+  padding: 20px 16px;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.9);
   box-shadow:
@@ -56,7 +55,7 @@
 }
 
 .gdg-stat__value {
-  margin-top: 18px;
+  margin-top: 8px;
   color: #102945;
   font-size: 1.62rem;
   font-weight: 950;
