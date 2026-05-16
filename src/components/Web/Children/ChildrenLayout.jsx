@@ -620,7 +620,7 @@ const ChildrenLayout = () => {
                       className="children-side-profile-logout"
                       onClick={handleLogout}
                     >
-                      Đăng xuất
+                    Đăng xuất
                     </button>
                   </div>
                 ) : sideStory?.kind === "story" ? (

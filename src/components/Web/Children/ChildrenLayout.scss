@@ -6,7 +6,7 @@ $children-shell-padding: 16px;
 $children-shell-max-width: 1232px;
 $children-side-width: 386px;
 $children-layout-gap: 44px;
-$children-side-viewport-gap: 52px;
+$children-side-viewport-gap: 32px;
 
 .children-page {
   width: 100%;
@@ -41,6 +41,9 @@ $children-side-viewport-gap: 52px;
   overflow-x: hidden;
   overflow-y: auto;
   z-index: 1;
+  -webkit-scrollbar: none;
+  -ms-overflow-style: none;
+  scrollbar-width: none; 
 }
 
 .children-side-hero {
@@ -151,7 +154,7 @@ $children-side-viewport-gap: 52px;
 .children-side-profile-guardian {
   width: 100%;
   padding: 0 10px;
-  margin-top: 6px;
+  margin: 6px 0;
 }
 
 .children-side-profile-guardian-title {
@@ -204,6 +207,7 @@ $children-side-viewport-gap: 52px;
   font-weight: 900;
   cursor: pointer;
   transition: 0.2s;
+  font-size: 20px;
 
   &:hover {
     background: darken($primary-color, 6%);
@@ -225,7 +229,7 @@ $children-side-viewport-gap: 52px;
   gap: 10px;
   padding: 10px 12px;
   border-radius: 12px;
-  border: 1.5px solid rgba($primary-color, 0.18);
+  border: none;
   background: rgba(255, 255, 255, 0.65);
   color: $text-main;
   font-weight: 900;
@@ -235,7 +239,7 @@ $children-side-viewport-gap: 52px;
   box-sizing: border-box;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.9);
+    background: rgba($primary-color, 0.2);
     border-color: rgba($primary-color, 0.28);
   }
 }
@@ -392,17 +396,14 @@ $children-side-viewport-gap: 52px;
 .children-side-story {
   width: 100%;
   max-width: 280px;
-  margin: 0 auto;
+  // margin: 0 auto;
   text-align: left;
 }
 
 .children-side-story-cover {
   width: 100%;
-  aspect-ratio: 3 / 4;
   border-radius: 14px;
   overflow: hidden;
-  background: #ffffff;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
   margin-bottom: 24px;
 }
 
@@ -441,7 +442,7 @@ $children-side-viewport-gap: 52px;
 .children-side-story-desc {
   margin: 0 0 14px;
   color: $text-main;
-  font-size: 1rem;
+  font-size: 2rem;
   line-height: 1.35;
   display: -webkit-box;
   line-clamp: 4;
@@ -452,7 +453,6 @@ $children-side-viewport-gap: 52px;
 
 .children-side-story-cta {
   width: 100%;
-  height: 42px;
   border-radius: 12px;
   border: none;
   background: $primary-color;
@@ -460,6 +460,8 @@ $children-side-viewport-gap: 52px;
   font-weight: 800;
   cursor: pointer;
   transition: 0.2s;
+  font-size: 20px;
+  padding: 12px 14px;
 
   &:hover:not(:disabled) {
     background: color.adjust($primary-color, $lightness: -6%);
@@ -478,7 +480,7 @@ $children-side-viewport-gap: 52px;
   display: flex;
   flex-direction: column;
   margin: 0 30px;
-  padding-top: 52px;
+  padding-top: $children-side-viewport-gap;
   min-height: 100vh;
   height: 100vh;
   min-height: 0;

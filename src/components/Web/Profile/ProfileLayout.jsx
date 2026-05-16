@@ -106,20 +106,12 @@ const ProfileLayout = () => {
       <section className="profile-collection">
         <div className="profile-collection-header">
           <div className="profile-collection-intro">
-            <h2 className="profile-section-title">🏆 Bộ sưu tập</h2>
+            <h2 className="profile-section-title">Bộ sưu tập</h2>
 
             <p className="profile-section-subtitle">
               Những vật phẩm bạn đã sưu tập được
             </p>
           </div>
-
-          <button
-            type="button"
-            className="profile-view-all"
-            onClick={() => navigate("/children/collection")}
-          >
-            Xem tất cả
-          </button>
         </div>
 
         {collection.length === 0 ? (
@@ -135,7 +127,7 @@ const ProfileLayout = () => {
               className="profile-empty-btn"
               onClick={() => navigate("/children/store")}
             >
-              Đến cửa hàng 🎁
+              Đến cửa hàng
             </button>
           </div>
         ) : (
