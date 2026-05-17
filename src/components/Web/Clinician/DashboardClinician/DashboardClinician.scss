@@ -4,6 +4,15 @@
   width: 100%;
 }
 
+.cdc-error {
+  margin-top: 14px;
+  border-radius: 10px;
+  background: rgba(220, 38, 38, 0.08);
+  color: #b91c1c;
+  font-weight: 800;
+  padding: 12px 14px;
+}
+
 .cdc-stats {
   margin-top: 14px;
   display: grid;
@@ -70,6 +79,12 @@
   overflow: hidden;
 }
 
+.cdc-empty {
+  padding: 18px 16px;
+  color: $text-secondary;
+  font-weight: 800;
+}
+
 .cdc-item {
   display: flex;
   gap: 14px;
@@ -117,6 +132,7 @@
   font-weight: 900;
   cursor: pointer;
   padding: 0;
+  text-decoration: none;
 
   &:hover {
     text-decoration: underline;
@@ -140,4 +156,3 @@
     text-align: left;
   }
 }
-

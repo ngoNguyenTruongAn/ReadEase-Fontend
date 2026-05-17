@@ -93,7 +93,9 @@ $navy: #1a2b4a;
   width: 100%;
   min-width: 0;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
-  gap: 18px;
+  column-gap: 18px;
+  row-gap: 30px;
+  align-items: stretch;
 }
 
 // ─────────────────── Card ───────────────────
@@ -209,9 +211,12 @@ $navy: #1a2b4a;
 .profile-card-name {
   width: 100%;
   max-width: 100%;
+  min-height: 2.7em;
+  margin-bottom: 12px;
   font-size: 0.82rem;
   font-weight: 850;
 
+  display: -webkit-box;
   text-align: center;
 
   color: $navy;
@@ -223,10 +228,9 @@ $navy: #1a2b4a;
   letter-spacing: 0.03em;
   overflow-wrap: break-word;
   word-break: break-word;
-  display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
 }
 

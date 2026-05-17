@@ -76,7 +76,7 @@ const uploadCoverImage = async (file) => {
     const filePath = `covers/${fileName}`;
 
     // 1. Upload lên bucket 'contents'
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from("contents")
       .upload(filePath, file);
 
@@ -101,6 +101,16 @@ const uploadCoverImage = async (file) => {
 };
 
 // Content (reading materials) - ROLE_CLINICIAN
+const getDashboard = async () => {
+  try {
+    const response = await instance.get("clinician/dashboard");
+    return response.data;
+  } catch (error) {
+    console.error("Error getting clinician dashboard:", error);
+    throw error;
+  }
+};
+
 const createContent = async (
   title,
   body,
@@ -272,6 +282,7 @@ const updateReportContent = async (reportId, content) => {
 };
 
 export default {
+  getDashboard,
   uploadCoverImage,
   // content
   createContent,

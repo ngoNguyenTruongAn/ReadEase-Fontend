@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "react-toastify";
+import { useSearchParams } from "react-router-dom";
 import ClinicianAPI from "../../../../service/Clinician/ClinicianAPI";
 import GuardianAPI from "../../../../service/Guardian/GuardianAPI";
 import { humanizeApiError } from "../../../../service/instance";
@@ -143,6 +144,10 @@ const mergeReportContent = (parts) => {
 };
 
 const Reports = () => {
+  const [searchParams] = useSearchParams();
+  const requestedChildId = searchParams.get("child") ?? "";
+  const requestedReportId = searchParams.get("report") ?? "";
+
   const [children, setChildren] = useState([]);
   const [loadingChildren, setLoadingChildren] = useState(true);
   const [childError, setChildError] = useState("");
@@ -166,6 +171,7 @@ const Reports = () => {
     splitReportContent(""),
   );
   const [savingContent, setSavingContent] = useState(false);
+  const [autoOpenedReportId, setAutoOpenedReportId] = useState("");
 
   const fetchChildren = useCallback(async () => {
     setLoadingChildren(true);
@@ -175,6 +181,12 @@ const Reports = () => {
       const list = normalizeChildren(res);
       setChildren(list);
       setSelectedChildId((prev) => {
+        if (
+          requestedChildId &&
+          list.some((c) => String(c.id) === String(requestedChildId))
+        ) {
+          return String(requestedChildId);
+        }
         if (prev && list.some((c) => String(c.id) === String(prev)))
           return prev;
         return list[0]?.id != null ? String(list[0].id) : "";
@@ -186,7 +198,7 @@ const Reports = () => {
     } finally {
       setLoadingChildren(false);
     }
-  }, []);
+  }, [requestedChildId]);
 
   const fetchReports = useCallback(async (childId) => {
     if (!childId) {
@@ -237,35 +249,65 @@ const Reports = () => {
     }
   };
 
-  const resetContentEdit = () => {
+  const resetContentEdit = useCallback(() => {
     setContentEditing(false);
     setEditDraft("");
     setCommentParts(splitReportContent(""));
     setSavingContent(false);
-  };
+  }, []);
 
-  const openDetail = async (reportId) => {
-    const id = reportId != null ? String(reportId).trim() : "";
-    if (!id) return;
-    setDetailOpen(true);
-    setDetailLoading(true);
-    setDetail(null);
-    resetContentEdit();
-    setDetailReportId(id);
-    try {
-      const res = await GuardianAPI.getReportById(id);
-      const normalized = normalizeReportDetail(res);
-      setDetail(normalized);
-      const resolvedId = resolveActiveReportId(normalized, id);
-      if (resolvedId) setDetailReportId(resolvedId);
-    } catch (err) {
-      toast.error(humanizeApiError(err, "Không tải được chi tiết báo cáo."));
-      setDetailOpen(false);
-      setDetailReportId("");
-    } finally {
-      setDetailLoading(false);
+  const openDetail = useCallback(
+    async (reportId) => {
+      const id = reportId != null ? String(reportId).trim() : "";
+      if (!id) return;
+      setDetailOpen(true);
+      setDetailLoading(true);
+      setDetail(null);
+      resetContentEdit();
+      setDetailReportId(id);
+      try {
+        const res = await GuardianAPI.getReportById(id);
+        const normalized = normalizeReportDetail(res);
+        setDetail(normalized);
+        const resolvedId = resolveActiveReportId(normalized, id);
+        if (resolvedId) setDetailReportId(resolvedId);
+      } catch (err) {
+        toast.error(humanizeApiError(err, "Không tải được chi tiết báo cáo."));
+        setDetailOpen(false);
+        setDetailReportId("");
+      } finally {
+        setDetailLoading(false);
+      }
+    },
+    [resetContentEdit],
+  );
+
+  useEffect(() => {
+    setAutoOpenedReportId("");
+  }, [requestedChildId, requestedReportId]);
+
+  useEffect(() => {
+    const reportId = requestedReportId.trim();
+    if (!reportId || loadingReports || detailLoading) return;
+    if (autoOpenedReportId === reportId) return;
+    if (
+      requestedChildId &&
+      String(selectedChildId) !== String(requestedChildId)
+    ) {
+      return;
     }
-  };
+
+    setAutoOpenedReportId(reportId);
+    openDetail(reportId);
+  }, [
+    autoOpenedReportId,
+    detailLoading,
+    loadingReports,
+    openDetail,
+    requestedChildId,
+    requestedReportId,
+    selectedChildId,
+  ]);
 
   const closeDetail = () => {
     setDetailOpen(false);
