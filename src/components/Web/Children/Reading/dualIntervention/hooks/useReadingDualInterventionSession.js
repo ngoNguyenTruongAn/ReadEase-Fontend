@@ -4,7 +4,6 @@ import {
   DEFAULT_FLUSH_INTERVAL_MS,
   DISTRACTION_HINT_DURATION_MS,
   createTrackingPoint,
-  createTrackingSessionId,
   createMouseBatchEvent,
   createSessionEndEvent,
   createSessionStartEvent,
@@ -12,6 +11,7 @@ import {
   parseTrackingSocketMessage,
   resolveTrackingSocketUrl,
 } from "../trackingProtocol";
+import api from "../../../../../../app/instance";
 import { interpretTrackingSocketEvent } from "../socketEventInterpreter";
 import {
   ADAPTATION_STATES,
@@ -1780,74 +1780,27 @@ const useReadingDualInterventionSession = ({
     };
     socketOpenedAtRef.current = 0;
 
-    const tokenContext = getTrackingAuthTokenContext();
-    const token = tokenContext.token;
-    const wsUrl = token
-      ? buildSocketUrlForVariant({
-        token,
-      })
-      : resolveTrackingSocketUrl({
-        trackingBaseUrl,
-        apiBaseUrl,
-        token,
-      });
-
-    if (!token) {
-      markDebug({
-        authTokenReady: false,
-        tokenSourceKey: "",
-        tokenClaimsReady: false,
-        wsStatus: "blocked:no-token",
-        wsUrl,
-        sessionId: "",
-        trackingContentId: contentId ?? null,
-        handshakeVariant: resolveHandshakeVariantLabel(handshakeVariantRef.current),
-        sessionStartStrategy: resolveSessionStartStrategyLabel(sessionStartStrategyRef.current),
-      });
-      localFallbackAllowedRef.current = false;
-      return undefined;
-    }
-
-    if (!tokenContext.hasRequiredClaims) {
-      markDebug({
-        authTokenReady: false,
-        tokenSourceKey: tokenContext.sourceKey || "",
-        tokenClaimsReady: false,
-        wsStatus: "blocked:invalid-token-claims",
-        wsUrl,
-        sessionId: "",
-        trackingContentId: contentId ?? null,
-        handshakeVariant: resolveHandshakeVariantLabel(handshakeVariantRef.current),
-        sessionStartStrategy: resolveSessionStartStrategyLabel(sessionStartStrategyRef.current),
-        lastError: `invalid_tracking_token_claims:${tokenContext.sourceKey || "unknown_source"}`,
-      });
-      localFallbackAllowedRef.current = true;
-      return undefined;
-    }
-
-    localFallbackAllowedRef.current = false;
-
-    const nextSessionId = createTrackingSessionId();
-    sessionIdRef.current = nextSessionId;
-
-    markDebug({
-      authTokenReady: true,
-      tokenSourceKey: tokenContext.sourceKey || "",
-      tokenClaimsReady: true,
-      wsStatus: "connecting",
-      wsUrl,
-      wsCloseCode: null,
-      wsCloseReason: "",
-      sessionId: nextSessionId,
-      trackingContentId: contentId ?? null,
-      handshakeVariant: resolveHandshakeVariantLabel(handshakeVariantRef.current),
-      lastError: "",
-      reconnectAttempts: 0,
-      sessionStartStrategy: resolveSessionStartStrategyLabel(sessionStartStrategyRef.current),
-      bufferedPoints: pointBufferRef.current.length,
-    });
-
     let isActive = true;
+
+    const requestReadingTrackingToken = async () => {
+      const response = await api.post("tracking/session-token", {
+        ...(contentId ? { contentId } : {}),
+      });
+
+      const data = response?.data || {};
+      const trackingToken =
+        data.trackingToken ||
+        data.tracking_token ||
+        data.data?.trackingToken ||
+        data.data?.tracking_token;
+
+      if (!trackingToken) {
+        throw new Error("tracking_session_token_missing");
+      }
+
+      window.localStorage.setItem("tracking_token", trackingToken);
+      return trackingToken;
+    };
 
     const connectSocket = () => {
       if (!isActive || closeIntentRef.current) return;
@@ -1898,6 +1851,7 @@ const useReadingDualInterventionSession = ({
       }
 
       localFallbackAllowedRef.current = false;
+      sessionIdRef.current = String(tokenContextOnConnect.payload?.session_id || "");
 
       markDebug({
         authTokenReady: true,
@@ -1905,6 +1859,7 @@ const useReadingDualInterventionSession = ({
         tokenClaimsReady: true,
         wsStatus: "connecting",
         wsUrl: currentWsUrl,
+        sessionId: sessionIdRef.current,
         handshakeVariant: resolveHandshakeVariantLabel(activeHandshakeVariant),
         sessionStartStrategy: resolveSessionStartStrategyLabel(sessionStartStrategyRef.current),
         lastError: "",
@@ -2018,7 +1973,110 @@ const useReadingDualInterventionSession = ({
       };
     };
 
-    connectSocket();
+    const initializeTrackingSocket = async () => {
+      markDebug({
+        wsStatus: "preparing-token",
+        sessionId: "",
+        trackingContentId: contentId ?? null,
+        lastError: "",
+      });
+
+      try {
+        await requestReadingTrackingToken();
+      } catch (error) {
+        if (!isActive) return;
+
+        markDebug({
+          authTokenReady: false,
+          tokenSourceKey: "",
+          tokenClaimsReady: false,
+          wsStatus: "blocked:session-token",
+          wsUrl: resolveTrackingSocketUrl({
+            trackingBaseUrl,
+            apiBaseUrl,
+            token: "",
+          }),
+          sessionId: "",
+          trackingContentId: contentId ?? null,
+          handshakeVariant: resolveHandshakeVariantLabel(handshakeVariantRef.current),
+          sessionStartStrategy: resolveSessionStartStrategyLabel(sessionStartStrategyRef.current),
+          lastError: error?.message || "tracking_session_token_failed",
+        });
+        localFallbackAllowedRef.current = true;
+        return;
+      }
+
+      if (!isActive || closeIntentRef.current) return;
+
+      const tokenContext = getTrackingAuthTokenContext();
+      const token = tokenContext.token;
+      const wsUrl = token
+        ? buildSocketUrlForVariant({
+          token,
+        })
+        : resolveTrackingSocketUrl({
+          trackingBaseUrl,
+          apiBaseUrl,
+          token,
+        });
+
+      if (!token) {
+        markDebug({
+          authTokenReady: false,
+          tokenSourceKey: "",
+          tokenClaimsReady: false,
+          wsStatus: "blocked:no-token",
+          wsUrl,
+          sessionId: "",
+          trackingContentId: contentId ?? null,
+          handshakeVariant: resolveHandshakeVariantLabel(handshakeVariantRef.current),
+          sessionStartStrategy: resolveSessionStartStrategyLabel(sessionStartStrategyRef.current),
+        });
+        localFallbackAllowedRef.current = false;
+        return;
+      }
+
+      if (!tokenContext.hasRequiredClaims) {
+        markDebug({
+          authTokenReady: false,
+          tokenSourceKey: tokenContext.sourceKey || "",
+          tokenClaimsReady: false,
+          wsStatus: "blocked:invalid-token-claims",
+          wsUrl,
+          sessionId: "",
+          trackingContentId: contentId ?? null,
+          handshakeVariant: resolveHandshakeVariantLabel(handshakeVariantRef.current),
+          sessionStartStrategy: resolveSessionStartStrategyLabel(sessionStartStrategyRef.current),
+          lastError: `invalid_tracking_token_claims:${tokenContext.sourceKey || "unknown_source"}`,
+        });
+        localFallbackAllowedRef.current = true;
+        return;
+      }
+
+      localFallbackAllowedRef.current = false;
+      sessionIdRef.current = String(tokenContext.payload?.session_id || "");
+
+      markDebug({
+        authTokenReady: true,
+        tokenSourceKey: tokenContext.sourceKey || "",
+        tokenClaimsReady: true,
+        wsStatus: "connecting",
+        wsUrl,
+        wsCloseCode: null,
+        wsCloseReason: "",
+        sessionId: sessionIdRef.current,
+        trackingContentId: contentId ?? null,
+        handshakeVariant: resolveHandshakeVariantLabel(handshakeVariantRef.current),
+        lastError: "",
+        reconnectAttempts: 0,
+        sessionStartStrategy: resolveSessionStartStrategyLabel(sessionStartStrategyRef.current),
+        bufferedPoints: pointBufferRef.current.length,
+      });
+
+      connectSocket();
+    };
+
+    initializeTrackingSocket();
 
     return () => {
       isActive = false;

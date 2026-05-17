@@ -1,5 +1,14 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const mockApi = vi.hoisted(() => ({
+  post: vi.fn(),
+}));
+
+vi.mock("../../../../../../app/instance", () => ({
+  default: mockApi,
+}));
+
 import useReadingDualInterventionSession from "./useReadingDualInterventionSession";
 
 class MockWebSocket {
@@ -138,6 +147,21 @@ describe("useReadingDualInterventionSession scenarios", () => {
     localStorage.clear();
     MockWebSocket.instances = [];
     globalThis.WebSocket = MockWebSocket;
+    mockApi.post.mockImplementation(async () => {
+      const trackingToken =
+        localStorage.getItem("tracking_token") ||
+        localStorage.getItem("access_token");
+      if (!trackingToken) {
+        throw new Error("missing_access_token");
+      }
+
+      return {
+        data: {
+          trackingToken,
+          sessionId: "session-1",
+        },
+      };
+    });
   });
 
   afterEach(() => {
@@ -145,6 +169,7 @@ describe("useReadingDualInterventionSession scenarios", () => {
     localStorage.clear();
     MockWebSocket.instances = [];
     globalThis.WebSocket = originalWebSocket;
+    mockApi.post.mockReset();
   });
 
   it("Scenario A (reload without token) blocks WS session and reports debug status", async () => {
@@ -161,7 +186,7 @@ describe("useReadingDualInterventionSession scenarios", () => {
       await flushMicrotasks();
     });
 
-    expect(result.current.trackingDebug.wsStatus).toBe("blocked:no-token");
+    expect(result.current.trackingDebug.wsStatus).toBe("blocked:session-token");
     expect(result.current.trackingDebug.authTokenReady).toBe(false);
     expect(result.current.trackingDebug.outbound.sessionStart).toBe(0);
     expect(MockWebSocket.instances).toHaveLength(0);
@@ -469,6 +494,47 @@ describe("useReadingDualInterventionSession scenarios", () => {
 
     expect(result.current.trackingDebug.wsStatus).toBe("blocked:invalid-token-claims");
     expect(MockWebSocket.instances).toHaveLength(0);
+  });
+
+  it("uses the backend-issued per-reading session id for WebSocket debug state", async () => {
+    localStorage.setItem(
+      "access_token",
+      createJwt({
+        sub: "user-2",
+        role: "ROLE_CHILD",
+      }),
+    );
+
+    const backendTrackingToken = createJwt({
+      user_id: "user-2",
+      session_id: "backend-session-2",
+    });
+
+    mockApi.post.mockResolvedValueOnce({
+      data: {
+        trackingToken: backendTrackingToken,
+        sessionId: "backend-session-2",
+      },
+    });
+
+    const { result } = renderHook(() =>
+      useReadingDualInterventionSession({
+        enabled: true,
+        contentId: "story-3",
+        apiBaseUrl: "http://localhost:3000/api/v1/",
+        resolveTooltipByWordIndex: () => null,
+      }),
+    );
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(mockApi.post).toHaveBeenCalledWith("tracking/session-token", {
+      contentId: "story-3",
+    });
+    expect(result.current.trackingDebug.sessionId).toBe("backend-session-2");
+    expect(MockWebSocket.instances[0].url).toContain(encodeURIComponent(backendTrackingToken));
   });
 
   it("applies backend regression adaptation immediately", async () => {
