@@ -76,12 +76,6 @@ const DashboardClinician = () => {
         value: dashboard.stats.pendingReports,
         icon: readingBook,
       },
-      {
-        key: "abnormalSessions",
-        label: "Phiên đọc bất thường",
-        value: dashboard.stats.abnormalSessions,
-        icon: readingBook,
-      },
     ],
     [dashboard.stats],
   );

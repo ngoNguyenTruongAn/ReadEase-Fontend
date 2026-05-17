@@ -94,7 +94,7 @@ const ClinicianProfile = () => {
           <div className="clpr-card__title">Bảo mật tài khoản</div>
           <p className="clpr-card__desc">Quản lý mật khẩu để bảo vệ dữ liệu phòng khám.</p>
           <button className="clpr-btn clpr-btn--primary" onClick={() => setShowChangePwModal(true)}>
-            🔒 Đổi mật khẩu
+            Đổi mật khẩu
           </button>
         </div>
       </div>

@@ -184,7 +184,8 @@
 
 .guardian-settings-side__inner {
   width: 100%;
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
   padding: 48px 34px 36px;
   box-sizing: border-box;
   display: flex;
@@ -241,6 +242,10 @@
 
 .guardian-settings-children {
   width: 100%;
+  min-height: 0;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
 }
 
 .guardian-settings-side-title {
@@ -256,7 +261,16 @@
   padding: 0;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
   gap: 14px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.guardian-settings-child-list::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .guardian-settings-child-item {
@@ -315,8 +329,9 @@
 
 .guardian-settings-logout {
   width: 100%;
+  flex: 0 0 auto;
   min-height: 54px;
-  margin-top: auto;
+  margin-top: 18px;
   border: none;
   border-radius: 14px;
   background: $primary-color;
@@ -526,6 +541,102 @@
   }
 }
 
+@media (min-width: 761px) and (max-height: 860px) {
+  .guardian-settings-side__inner {
+    padding: 32px 32px 24px;
+  }
+
+  .guardian-settings-hero {
+    width: 232px;
+    height: 232px;
+    margin-bottom: 24px;
+  }
+
+  .guardian-overview-side .guardian-settings-hero {
+    width: 232px;
+    height: 232px;
+    margin-bottom: 28px;
+  }
+
+  .guardian-settings-profile {
+    margin-bottom: 22px;
+  }
+
+  .guardian-overview-side .guardian-settings-profile {
+    margin-bottom: 24px;
+  }
+
+  .guardian-settings-name,
+  .guardian-overview-side .guardian-settings-name {
+    font-size: 1.95rem;
+  }
+
+  .guardian-settings-username {
+    margin-bottom: 14px;
+  }
+
+  .guardian-overview-divider {
+    margin-top: 24px;
+  }
+
+  .guardian-settings-child-list {
+    gap: 10px;
+  }
+
+  .guardian-settings-child-avatar {
+    width: 42px;
+    height: 42px;
+  }
+
+  .guardian-settings-child-item {
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+  }
+
+  .guardian-settings-logout {
+    min-height: 48px;
+    margin-top: 14px;
+    font-size: 1.12rem;
+  }
+}
+
+@media (min-width: 761px) and (max-height: 740px) {
+  .guardian-settings-side__inner {
+    padding: 24px 28px 20px;
+  }
+
+  .guardian-settings-hero,
+  .guardian-overview-side .guardian-settings-hero {
+    width: 190px;
+    height: 190px;
+    margin-bottom: 18px;
+  }
+
+  .guardian-settings-profile,
+  .guardian-overview-side .guardian-settings-profile {
+    margin-bottom: 18px;
+  }
+
+  .guardian-settings-name,
+  .guardian-overview-side .guardian-settings-name {
+    font-size: 1.7rem;
+  }
+
+  .guardian-settings-username {
+    margin-bottom: 10px;
+  }
+
+  .guardian-settings-joined,
+  .guardian-settings-side-title,
+  .guardian-settings-child-name,
+  .guardian-settings-child-score {
+    font-size: 0.92rem;
+  }
+
+  .guardian-overview-divider {
+    margin-top: 18px;
+  }
+}
+
 @media (max-width: 760px) {
   .guardian-page--settings {
     height: auto;
@@ -549,6 +660,7 @@
   }
 
   .guardian-settings-side__inner {
+    height: auto;
     min-height: 0;
     padding: 26px 20px;
   }

@@ -96,6 +96,19 @@ const POINT_KEYS = [
   "balance",
 ];
 
+const EFFORT_SCORE_KEYS = [
+  "effort_score",
+  "effortScore",
+  "effort_percent",
+  "effortPercent",
+  "effort_percentage",
+  "effortPercentage",
+  "average_effort_score",
+  "averageEffortScore",
+  "avg_effort_score",
+  "avgEffortScore",
+];
+
 const READING_DURATION_KEYS = [
   "reading_time_seconds",
   "readingTimeSeconds",
@@ -229,10 +242,11 @@ const aggregateFirstNumber = (rows, keys, options) =>
 
       return {
         total: acc.total + value,
+        count: acc.count + 1,
         found: true,
       };
     },
-    { total: 0, found: false },
+    { total: 0, count: 0, found: false },
   );
 
 const collectReportText = (row) => {
@@ -480,9 +494,15 @@ const parseMaybeJsonObject = (value) => {
   }
 };
 
-const sessionEffortScore = (row) => {
-  const direct = toFiniteNumber(row?.effort_score ?? row?.effortScore);
-  if (direct !== null) return direct;
+const effortScoreFromRow = (row) => {
+  const sources = collectMetricSources(row);
+
+  for (const source of sources) {
+    for (const key of EFFORT_SCORE_KEYS) {
+      const score = toFiniteNumber(source?.[key]);
+      if (score !== null) return score;
+    }
+  }
 
   const summary = parseMaybeJsonObject(
     row?.cognitive_state_summary ?? row?.cognitiveStateSummary,
@@ -490,18 +510,26 @@ const sessionEffortScore = (row) => {
   return toFiniteNumber(summary?.effort_score ?? summary?.effortScore);
 };
 
-const aggregateEffortScorePoints = (sessions) =>
-  sessions.reduce(
+const effortScoreToPercent = (score) => {
+  if (score === null) return null;
+
+  const percent = score <= 1 ? score * 100 : score;
+  return Math.min(100, Math.max(0, percent));
+};
+
+const aggregateEffortScorePercent = (rows) =>
+  rows.reduce(
     (acc, session) => {
-      const score = sessionEffortScore(session);
-      if (score === null) return acc;
+      const percent = effortScoreToPercent(effortScoreFromRow(session));
+      if (percent === null) return acc;
 
       return {
-        total: acc.total + score * 100,
+        total: acc.total + percent,
+        count: acc.count + 1,
         found: true,
       };
     },
-    { total: 0, found: false },
+    { total: 0, count: 0, found: false },
   );
 
 const sessionDate = (row) => {
@@ -626,6 +654,8 @@ const selectStatsReportEntries = (reportEntries) => {
 const formatInteger = (value) =>
   new Intl.NumberFormat("vi-VN").format(Math.max(0, Math.round(value)));
 
+const formatPercent = (value) => `${formatInteger(value)}%`;
+
 const formatDuration = (secondsValue) => {
   const totalSeconds = Math.max(0, Math.round(secondsValue));
   if (totalSeconds <= 0) return "0 phút";
@@ -734,6 +764,11 @@ const buildStats = (children = [], reportEntries = [], sessionEntries = []) => {
   const statsReportRows = statsReportEntries.map(({ report }) => report);
   const completedSessionEntries =
     completedCurrentWeekSessionEntries(sessionEntries);
+  const childrenById = new Map(
+    children
+      .map((child) => [childRowId(child), child])
+      .filter(([childId]) => Boolean(childId)),
+  );
 
   const childIds = new Set([
     ...children.map((child) => childRowId(child)).filter(Boolean),
@@ -746,34 +781,52 @@ const buildStats = (children = [], reportEntries = [], sessionEntries = []) => {
       const childSessions = completedSessionEntries
         .filter((entry) => entry.childId === childId)
         .map(({ session }) => session);
+      const childReportRows = statsReportEntries
+        .filter((entry) => entry.childId === childId)
+        .map(({ report }) => report);
+      const childRow = childrenById.get(childId);
+
+      const effort = childSessions.length
+        ? aggregateEffortScorePercent(childSessions)
+        : childReportRows.length
+          ? aggregateEffortScorePercent(childReportRows)
+          : aggregateEffortScorePercent(childRow ? [childRow] : []);
+      const childEffortAverage =
+        effort.found && effort.count > 0 ? effort.total / effort.count : null;
 
       if (childSessions.length) {
         const duration = aggregateReadingDurationSeconds(childSessions);
-        const effort = aggregateEffortScorePoints(childSessions);
         return {
           sessions: acc.sessions + childSessions.length,
           readingSeconds:
             acc.readingSeconds + (duration.found ? duration.total : 0),
           foundReading: acc.foundReading || duration.found,
-          points: acc.points + (effort.found ? effort.total : 0),
-          foundPoints: acc.foundPoints || effort.found,
+          effortPercentTotal:
+            acc.effortPercentTotal + (childEffortAverage ?? 0),
+          effortChildCount:
+            acc.effortChildCount + (childEffortAverage === null ? 0 : 1),
+          foundEffort: acc.foundEffort || childEffortAverage !== null,
         };
       }
 
-      const childReportRows = statsReportEntries
-        .filter((entry) => entry.childId === childId)
-        .map(({ report }) => report);
       const reportSessionCount = aggregateSessionCount(childReportRows);
       const reportDuration = aggregateReadingDurationSeconds(childReportRows);
-      if (reportSessionCount.found || reportDuration.found) {
+      if (
+        reportSessionCount.found ||
+        reportDuration.found ||
+        childEffortAverage !== null
+      ) {
         return {
           sessions:
             acc.sessions + (reportSessionCount.found ? reportSessionCount.total : 0),
           readingSeconds:
             acc.readingSeconds + (reportDuration.found ? reportDuration.total : 0),
           foundReading: acc.foundReading || reportDuration.found,
-          points: acc.points,
-          foundPoints: acc.foundPoints,
+          effortPercentTotal:
+            acc.effortPercentTotal + (childEffortAverage ?? 0),
+          effortChildCount:
+            acc.effortChildCount + (childEffortAverage === null ? 0 : 1),
+          foundEffort: acc.foundEffort || childEffortAverage !== null,
         };
       }
 
@@ -785,20 +838,22 @@ const buildStats = (children = [], reportEntries = [], sessionEntries = []) => {
       sessions: 0,
       readingSeconds: 0,
       foundReading: false,
-      points: 0,
-      foundPoints: false,
+      effortPercentTotal: 0,
+      effortChildCount: 0,
+      foundEffort: false,
     },
   );
 
   const childPoints = aggregateFirstNumber(children, POINT_KEYS);
   const reportPoints = aggregateFirstNumber(statsReportRows, POINT_KEYS);
-  const points = completionStats.foundPoints
-    ? completionStats.points
-    : childPoints.found && (childPoints.total > 0 || !reportPoints.found)
-      ? childPoints.total
-      : reportPoints.found
-        ? reportPoints.total
-        : 0;
+  const effortPercent =
+    completionStats.foundEffort && completionStats.effortChildCount > 0
+      ? completionStats.effortPercentTotal / completionStats.effortChildCount
+      : childPoints.found && (childPoints.total > 0 || !reportPoints.found)
+        ? childPoints.total / childPoints.count
+        : reportPoints.found
+          ? reportPoints.total / reportPoints.count
+          : 0;
 
   const readingSeconds = completionStats.foundReading
     ? completionStats.readingSeconds
@@ -813,7 +868,7 @@ const buildStats = (children = [], reportEntries = [], sessionEntries = []) => {
     {
       key: "points",
       label: STAT_LABELS.points,
-      value: formatInteger(points),
+      value: formatPercent(effortPercent),
     },
     {
       key: "reading",
