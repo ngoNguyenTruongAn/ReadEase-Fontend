@@ -1,8 +1,11 @@
 // api/axiosInstance.js
 import axios from "axios";
 
+const isDev = import.meta.env.DEV;
+const baseURL = import.meta.env.VITE_API_BASE_URL || (isDev ? "http://localhost:3000/api/v1/" : "/api/v1/");
+
 const instance = axios.create({
-  baseURL: "http://localhost:3000/api/v1/",
+  baseURL,
 });
 
 const getAccessToken = () =>
